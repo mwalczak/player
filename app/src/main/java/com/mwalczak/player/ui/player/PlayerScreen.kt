@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -147,13 +148,46 @@ private fun PlayerContent(
 
     // Start once the settings are known, and keep the controller in sync if they change.
     var started by remember { mutableStateOf(false) }
-    LaunchedEffect(settings) {
+    // Before the first channel: warn when every stream on the account is already in use, because
+    // starting would most likely cut off whoever is watching. Skipped when a phone hands its
+    // stream over to this TV (the "other viewer" is that phone).
+    var busyWarning by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var cleared by remember { mutableStateOf(queue.fromRemote) }
+    LaunchedEffect(Unit) {
+        if (!cleared) {
+            val usage = controller.connectionUsage()
+            if (usage != null && usage.second > 0 && usage.first >= usage.second) busyWarning = usage else cleared = true
+        }
+    }
+
+    LaunchedEffect(settings, cleared) {
         val s = settings ?: return@LaunchedEffect
         controller.settings = s
-        if (!started) {
+        if (!started && cleared) {
             started = true
             controller.start()
         }
+    }
+
+    busyWarning?.let { (active, max) ->
+        AlertDialog(
+            onDismissRequest = onExit,
+            title = { Text("All streams are in use") },
+            text = {
+                Text(
+                    "Your account allows $max stream${if (max == 1) "" else "s"} at a time and $active " +
+                        "${if (active == 1) "is" else "are"} in use right now – probably someone else is watching. " +
+                        "If you start, their stream will most likely stop (or yours won't start).",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    busyWarning = null
+                    cleared = true
+                }) { Text("Watch anyway") }
+            },
+            dismissButton = { TextButton(onClick = onExit) { Text("Cancel") } },
+        )
     }
 
     DisposableEffect(Unit) {

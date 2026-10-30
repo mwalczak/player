@@ -46,6 +46,9 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   - On a fresh install, the login page has **Import settings file**: pick the file and the app signs in and applies everything.
   - In Settings, *Import from file* can either add to your own favorites and lists or replace them.
   - Channels are matched by id, or by name when the importer's provider numbers them differently.
+- **Shared accounts**:
+  - Before playback starts, the app checks how many streams the account is using. If all are taken (e.g. 1 of 1), it warns that starting will probably cut off whoever is watching, with **Watch anyway** / **Cancel**.
+  - If your stream is refused while all connections are in use, the player says someone else started watching instead of hopping through channels. **Retry** takes the stream back.
 - **Automatic failover when a channel is off**:
   1. The same stream is retried once.
   2. The app tries other feeds of the same channel from the catalog. For example, if `US: ESPN HD` is down it plays `ESPN FHD` or `ESPN ᴴᴰ (Backup)`.

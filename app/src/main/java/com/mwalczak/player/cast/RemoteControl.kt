@@ -228,7 +228,7 @@ class RemoteControl(
             "play" -> {
                 if (runBlocking { settings.currentCredentials() } == null) return 409 to currentStatus(error = NOT_SIGNED_IN)
                 if (cmd.channels.isEmpty()) return 400 to currentStatus(error = "no channels")
-                val queue = PlaybackQueue(cmd.title ?: "From phone", cmd.channels, cmd.index.coerceIn(cmd.channels.indices))
+                val queue = PlaybackQueue(cmd.title ?: "From phone", cmd.channels, cmd.index.coerceIn(cmd.channels.indices), fromRemote = true)
                 emit(RemoteCommand.Play(queue))
                 val channel = queue.channels[queue.startIndex]
                 return 200 to currentStatus().copy(playing = channel.name, title = queue.title, index = queue.startIndex, count = queue.channels.size)

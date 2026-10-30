@@ -34,6 +34,8 @@ data class PlaybackQueue(
     val title: String,
     val channels: List<Channel>,
     val startIndex: Int,
+    /** Sent from another device (phone -> TV); that device just handed its stream over. */
+    val fromRemote: Boolean = false,
 )
 
 class AppContainer(context: Context) {

@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 sealed interface PlaybackStatus {
     data object Loading : PlaybackStatus
@@ -93,6 +94,7 @@ class PlayerController(
     private var hops = 0
     private var stallJob: Job? = null
     private var retryJob: Job? = null
+    private var limitJob: Job? = null
     private var epgJob: Job? = null
     private var noticeJob: Job? = null
 
@@ -112,7 +114,7 @@ class PlayerController(
                 player.prepare()
                 return
             }
-            onFailure(describe(error))
+            onFailure(describe(error), refused = error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS)
         }
     }
 
@@ -153,6 +155,7 @@ class PlayerController(
     fun release() {
         stallJob?.cancel()
         retryJob?.cancel()
+        limitJob?.cancel()
         epgJob?.cancel()
         noticeJob?.cancel()
         player.removeListener(listener)
@@ -162,6 +165,7 @@ class PlayerController(
     private fun play(channel: Channel, notice: String?) {
         stallJob?.cancel()
         retryJob?.cancel()
+        limitJob?.cancel()
         _state.update { it.copy(playing = channel, status = PlaybackStatus.Loading, epg = emptyList()) }
         showNotice(notice)
 
@@ -195,9 +199,9 @@ class PlayerController(
         }
     }
 
-    private fun onFailure(reason: String) {
+    private fun onFailure(reason: String, refused: Boolean = false) {
         stallJob?.cancel()
-        if (retryJob?.isActive == true) return
+        if (retryJob?.isActive == true || limitJob?.isActive == true) return
         val s = _state.value
         val current = s.playing
 
@@ -213,6 +217,35 @@ class PlayerController(
             return
         }
 
+        // 2. Refused by the server: if every connection on the account is taken, someone else is
+        //    watching. Say so instead of hopping through channels that would all be refused too.
+        if (refused) {
+            limitJob = scope.launch {
+                val usage = connectionUsage()
+                if (usage != null && usage.second > 0 && usage.first >= usage.second) {
+                    fail(
+                        "Stopped: all ${usage.second} stream${if (usage.second == 1) "" else "s"} on your account " +
+                            "${if (usage.second == 1) "is" else "are"} in use – someone else started watching. " +
+                            "Retry takes it back (their stream will likely stop).",
+                    )
+                } else {
+                    failOver(reason)
+                }
+            }
+            return
+        }
+        failOver(reason)
+    }
+
+    /** Active and maximum connections of the account, or null if the server didn't answer quickly. */
+    suspend fun connectionUsage(): Pair<Int, Int>? = withTimeoutOrNull(5_000) {
+        runCatching { container.xtream.authenticate(creds) }.getOrNull()
+            ?.let { (it.activeConnections ?: 0) to (it.maxConnections ?: 0) }
+    }
+
+    private fun failOver(reason: String) {
+        val s = _state.value
+        val current = s.playing
         failed += current.streamId
         val wanted = s.channels[s.index]
         if (++hops > MAX_HOPS) {
@@ -220,7 +253,7 @@ class PlayerController(
             return
         }
 
-        // 2. Another feed of the channel the user asked for.
+        // 3. Another feed of the channel the user asked for.
         if (settings.tryAlternates) {
             val catalog = container.catalog.catalog?.channels.orEmpty()
             val alternate = ChannelMatcher.alternatesFor(wanted, catalog).firstOrNull { it.streamId !in failed }
@@ -230,7 +263,7 @@ class PlayerController(
             }
         }
 
-        // 3. The next channel in the list.
+        // 4. The next channel in the list.
         if (settings.nextInList && s.channels.size > 1) {
             val nextIndex = (1 until s.channels.size)
                 .map { (s.index + it) % s.channels.size }
