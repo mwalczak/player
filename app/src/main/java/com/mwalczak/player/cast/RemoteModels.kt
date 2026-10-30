@@ -22,6 +22,9 @@ data class SyncPayload(
     val stallTimeoutSec: Int,
     val epgEnabled: Boolean,
     val epgUrl: String,
+    /** Chosen guide sources; null = automatic. Optional so older apps' payloads still read. */
+    val epgSources: List<String>? = null,
+    val epgWifiOnly: Boolean = true,
 )
 
 /** Body of `POST /command`. [type] is one of play, next, previous, last, stop, login, sync. */

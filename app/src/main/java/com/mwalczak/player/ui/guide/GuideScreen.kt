@@ -70,11 +70,11 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.ImeAction
 import com.mwalczak.player.data.epg.GuideHit
-import com.mwalczak.player.data.epg.GuideSearch
 import com.mwalczak.player.ui.common.CardShape
 import com.mwalczak.player.ui.common.progress
 import kotlinx.coroutines.Dispatchers
@@ -152,10 +152,10 @@ fun GuideTab(container: AppContainer, actions: Actions) {
                 }
             }
             when {
-                searching -> GuideSearchResults(container, catalog.channels, epg.programmes, query, actions)
+                searching -> GuideSearchResults(container, catalog.channels, epg.channelsWithGuide, epg.version, query, actions)
                 channels.isEmpty() -> EmptyState("No channels here.")
-                epg.programmes.isEmpty() && epg.loading -> EmptyState("Loading the TV guide…")
-                else -> GuideGrid(container, channels, epg.programmes, scroll) { index ->
+                epg.channelsWithGuide == 0 && epg.loading -> EmptyState("Loading the TV guide… ${epg.progress.orEmpty()}")
+                else -> GuideGrid(container, channels, epg.version, scroll) { index ->
                     actions.play(title, channels, index)
                 }
             }
@@ -173,7 +173,7 @@ private fun channelsFor(source: String, catalog: Catalog, favorites: List<Channe
 private fun GuideGrid(
     container: AppContainer,
     channels: List<Channel>,
-    programmes: Map<Int, List<Programme>>,
+    version: Int,
     scroll: ScrollState,
     onPlay: (Int) -> Unit,
 ) {
@@ -209,7 +209,11 @@ private fun GuideGrid(
                     Row(Modifier.fillMaxWidth().height(RowHeight).padding(vertical = 2.dp)) {
                         ChannelCell(channel) { onPlay(index) }
                         Row(Modifier.horizontalScroll(scroll)) {
-                            ProgrammeCells(programmes[channel.streamId].orEmpty(), windowStart, windowEnd, now, timeFormat) {
+                            // Each row reads its own channel from the guide database as it scrolls into view.
+                            val programmes by produceState(emptyList<Programme>(), channel.streamId, version) {
+                                value = container.epg.programmesFor(channel.streamId, windowStart, windowEnd)
+                            }
+                            ProgrammeCells(programmes, windowStart, windowEnd, now, timeFormat) {
                                 onPlay(index)
                             }
                         }
@@ -323,23 +327,22 @@ private fun widthOf(seconds: Long): Dp = PerMinute * (seconds / 60f)
 private fun GuideSearchResults(
     container: AppContainer,
     channels: List<Channel>,
-    programmes: Map<Int, List<Programme>>,
+    channelsWithGuide: Int,
+    version: Int,
     query: String,
     actions: Actions,
 ) {
     var hits by remember { mutableStateOf<List<GuideHit>>(emptyList()) }
-    LaunchedEffect(query, programmes) {
-        delay(200)
-        hits = withContext(Dispatchers.Default) {
-            GuideSearch.search(programmes, channels, query, System.currentTimeMillis() / 1000)
-        }
+    LaunchedEffect(query, version) {
+        delay(250)
+        hits = container.epg.search(query, channels, System.currentTimeMillis() / 1000)
     }
     val now by container.clock.collectAsStateWithLifecycle()
     val time = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
 
     when {
         query.isBlank() -> EmptyState("Type the name of a show to find when and where it's on.")
-        programmes.isEmpty() -> EmptyState("The TV guide isn't loaded yet.")
+        channelsWithGuide == 0 -> EmptyState("The TV guide isn't loaded yet.")
         hits.isEmpty() -> EmptyState("Nothing called “$query” in the next 24 hours.")
         else -> {
             // Playing a result zaps through the channels of all results.

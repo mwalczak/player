@@ -83,7 +83,8 @@ object Xmltv {
         id.substringAfterLast('.', "").lowercase().takeIf { it.length == 2 && it.all(Char::isLetter) }?.let { countryAliases[it] ?: it }
 
     /**
-     * Guide channel id -> our stream ids. Exact keys win over loose ones, each of our channels
+     * Guide channel id -> our stream ids. The provider's EPG id wins, then exact names, then
+     * loose ones; each of our channels
      * takes its programmes from a single guide channel, and a channel marked with a country
      * ("US: CNN") only matches guide channels of that country.
      */
@@ -98,6 +99,15 @@ object Xmltv {
         }
         val ourCountry = HashMap<Int, String?>().apply { ours.forEach { put(it.streamId, countryOf(it.name)) } }
         val assigned = HashMap<Int, Pair<String, Int>>() // stream id -> (guide id, tier)
+
+        // Exact first: the provider's own EPG id often is the guide's channel id ("foxkayu.us").
+        val byEpgId = ours.filter { !it.epgChannelId.isNullOrBlank() }.groupBy { it.epgChannelId!!.trim().lowercase() }
+        if (byEpgId.isNotEmpty()) {
+            guideChannels.keys.forEach { id ->
+                byEpgId[id.lowercase()]?.forEach { ch -> if (ch.streamId !in assigned) assigned[ch.streamId] = id to -1 }
+            }
+        }
+
         for (tier in 0..1) {
             guideChannels.forEach { (id, names) ->
                 val country = guideCountry(id)

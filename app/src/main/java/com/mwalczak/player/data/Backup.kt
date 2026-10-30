@@ -93,6 +93,8 @@ suspend fun currentSyncPayload(settings: SettingsStore, library: LibraryStore): 
         stallTimeoutSec = playback.stallTimeoutSec,
         epgEnabled = epg.enabled,
         epgUrl = epg.url,
+        epgSources = epg.sources?.sorted(),
+        epgWifiOnly = epg.wifiOnly,
     )
 }
 
@@ -107,5 +109,5 @@ suspend fun applySyncPayload(settings: SettingsStore, library: LibraryStore, pay
             stallTimeoutSec = payload.stallTimeoutSec,
         )
     }
-    settings.updateEpg(EpgSettings(payload.epgEnabled, payload.epgUrl))
+    settings.updateEpg(EpgSettings(payload.epgEnabled, payload.epgUrl, payload.epgSources?.toSet(), payload.epgWifiOnly))
 }

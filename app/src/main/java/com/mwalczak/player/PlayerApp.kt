@@ -57,7 +57,7 @@ class AppContainer(context: Context) {
     val library = LibraryStore(context, appScope)
     val updater = Updater(context, httpClient, appScope, BuildConfig.VERSION_CODE)
     val remote = RemoteControl(context, httpClient, settings, catalog, library, appScope)
-    val epg = EpgRepository(context, httpClient, xtream)
+    val epg = EpgRepository(context, httpClient, xtream, appScope)
 
     /** Current time in epoch seconds, ticking every 30 s, for "now" lines and progress bars. */
     val clock: StateFlow<Long> = flow {
@@ -71,23 +71,25 @@ class AppContainer(context: Context) {
         // Keep the guide in step with the channel list and the guide settings.
         appScope.launch {
             combine(catalog.state, settings.epg, settings.credentials) { c, e, creds ->
-                val channels = (c as? CatalogState.Ready)?.takeIf { !it.refreshing }?.catalog?.channels
-                Triple(channels, e, creds)
+                val ready = (c as? CatalogState.Ready)?.takeIf { !it.refreshing }?.catalog
+                Triple(ready, e, creds)
             }
                 .distinctUntilChanged()
-                .collectLatest { (channels, epgSettings, creds) ->
-                    if (channels == null || creds == null) return@collectLatest
-                    epg.refresh(creds, channels, epgSettings.url, epgSettings.enabled)
+                .collectLatest { (ready, epgSettings, creds) ->
+                    if (ready == null || creds == null) return@collectLatest
+                    epg.refresh(creds, ready, epgSettings, guidePriority())
                 }
         }
     }
 
     suspend fun refreshEpg() {
         val creds = settings.currentCredentials() ?: return
-        val channels = catalog.catalog?.channels ?: return
-        val e = settings.epg.first()
-        epg.refresh(creds, channels, e.url, e.enabled, force = true)
+        val current = catalog.catalog ?: return
+        epg.refresh(creds, current, settings.epg.first(), guidePriority(), force = true)
     }
+
+    /** Favorites and list channels get the provider's guide first when no XMLTV guide covers them. */
+    private fun guidePriority(): List<Channel> = library.library.value.let { lib -> lib.favorites + lib.lists.flatMap { it.channels } }
 
     /** Set right before navigating to the player screen. */
     var pendingQueue: PlaybackQueue? = null

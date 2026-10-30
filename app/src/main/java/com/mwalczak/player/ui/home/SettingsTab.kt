@@ -52,7 +52,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import com.mwalczak.player.data.EpgSettings
-import com.mwalczak.player.data.epg.DEFAULT_EPG_URL
+import com.mwalczak.player.data.epg.EpgSource
+import com.mwalczak.player.data.epg.EpgSources
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
@@ -88,6 +90,21 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
     val epgState by container.epg.state.collectAsStateWithLifecycle()
     val epgSettings by container.settings.epg.collectAsStateWithLifecycle(EpgSettings())
     var editingEpgUrl by remember { mutableStateOf(false) }
+    var choosingSources by remember { mutableStateOf(false) }
+    val readyCatalog = (catalogState as? CatalogState.Ready)?.catalog
+    val activeSources = remember(readyCatalog, epgSettings) {
+        readyCatalog?.let { container.epg.sourcesFor(it, epgSettings) }.orEmpty()
+    }
+    if (choosingSources) {
+        GuideSourcesDialog(
+            selected = epgSettings.sources,
+            automatic = readyCatalog?.let { EpgSources.autoSelect(it.channels, it.categories) }.orEmpty(),
+            onDismiss = { choosingSources = false },
+        ) { chosen ->
+            choosingSources = false
+            scope.launch { container.settings.updateEpg(epgSettings.copy(sources = chosen)) }
+        }
+    }
     var copyingToTv by remember { mutableStateOf(false) }
     val importContext = LocalContext.current
     var exporting by remember { mutableStateOf(false) }
@@ -121,11 +138,11 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
         var url by remember { mutableStateOf(epgSettings.url) }
         AlertDialog(
             onDismissRequest = { editingEpgUrl = false },
-            title = { Text("Guide source") },
+            title = { Text("Extra guide") },
             text = {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Optional: one more XMLTV guide on top of the built-in ones. Leave empty for none.")
                     OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("XMLTV URL (.xml or .xml.gz)") })
-                    TextButton(onClick = { url = DEFAULT_EPG_URL }) { Text("Use default (Poland)") }
                 }
             },
             confirmButton = {
@@ -194,18 +211,20 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
 
         SectionHeader(startPadding = 16.dp, text = "TV guide (EPG)")
         ListItem(
-            headlineContent = { Text("Use external guide") },
+            headlineContent = { Text("Programme guide") },
             supportingContent = {
                 Text(
                     when {
-                        epgState.loading -> "Updating the guide…"
-                        epgState.error != null -> "Error: ${epgState.error}"
+                        !epgSettings.enabled -> "Off – only your provider's own guide in the player"
+                        epgState.loading -> "Updating… ${epgState.progress.orEmpty()}"
                         epgState.updatedAtMillis > 0 -> {
-                            val total = (catalogState as? CatalogState.Ready)?.catalog?.channels?.size ?: 0
+                            val total = readyCatalog?.channels?.size ?: 0
                             val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(epgState.updatedAtMillis))
-                            "Guide for ${epgState.programmes.size} of $total channels · updated $time"
+                            "Guide for ${epgState.channelsWithGuide} of $total channels · updated $time" +
+                                (epgState.error?.let { "\n$it" } ?: "")
                         }
-                        else -> "Fills in programmes your provider doesn't send"
+                        epgState.error != null -> epgState.error!!
+                        else -> "Downloads guides for the countries in your channel list"
                     },
                 )
             },
@@ -214,16 +233,38 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
                 scope.launch { container.settings.updateEpg(epgSettings.copy(enabled = !epgSettings.enabled)) }
             },
         )
-        ListItem(
-            headlineContent = { Text("Guide source (XMLTV)") },
-            supportingContent = { Text(epgSettings.url, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-            modifier = Modifier.clickable { editingEpgUrl = true },
-        )
-        ListItem(
-            headlineContent = { Text("Refresh guide now") },
-            leadingContent = { Icon(Icons.Default.Refresh, null) },
-            modifier = Modifier.clickable { scope.launch { container.refreshEpg() } },
-        )
+        if (epgSettings.enabled) {
+            ListItem(
+                headlineContent = { Text(if (epgSettings.sources == null) "Guides: automatic" else "Guides: chosen by you") },
+                supportingContent = {
+                    Text(
+                        activeSources.filter { it.id != "custom" }.joinToString(", ") { it.label }.ifEmpty { "None" } +
+                            " · ~${activeSources.sumOf { it.approxMb }} MB per day",
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                modifier = Modifier.clickable { choosingSources = true },
+            )
+            ListItem(
+                headlineContent = { Text("Download guides only on Wi-Fi") },
+                supportingContent = { Text("Saves mobile data; the TV and Wi-Fi devices always update") },
+                trailingContent = { Switch(checked = epgSettings.wifiOnly, onCheckedChange = null) },
+                modifier = Modifier.clickable {
+                    scope.launch { container.settings.updateEpg(epgSettings.copy(wifiOnly = !epgSettings.wifiOnly)) }
+                },
+            )
+            ListItem(
+                headlineContent = { Text("Extra guide (XMLTV URL)") },
+                supportingContent = { Text(epgSettings.url.ifBlank { "None" }, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                modifier = Modifier.clickable { editingEpgUrl = true },
+            )
+            ListItem(
+                headlineContent = { Text("Refresh guide now") },
+                leadingContent = { Icon(Icons.Default.Refresh, null) },
+                modifier = Modifier.clickable { scope.launch { container.refreshEpg() } },
+            )
+        }
 
         SectionHeader(startPadding = 16.dp, text = "Other devices")
         ListItem(
@@ -391,4 +432,56 @@ internal suspend fun importBackup(container: AppContainer, backup: Backup, repla
     } else {
         container.library.replaceAll(Backups.merge(container.library.library.value, library))
     }
+}
+
+/** Automatic (by the countries in the channel list) or a hand-picked set of guides. */
+@Composable
+private fun GuideSourcesDialog(
+    selected: Set<String>?,
+    automatic: List<EpgSource>,
+    onDismiss: () -> Unit,
+    onSave: (Set<String>?) -> Unit,
+) {
+    var auto by remember { mutableStateOf(selected == null) }
+    var chosen by remember { mutableStateOf(selected ?: automatic.map { it.id }.toSet()) }
+    val shown = if (auto) automatic.map { it.id }.toSet() else chosen
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Guides") },
+        text = {
+            Column {
+                Row(Modifier.fillMaxWidth().clickable { auto = !auto }, verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = auto, onCheckedChange = { auto = it })
+                    Text("Automatic – countries found in your channel list")
+                }
+                Text(
+                    "~${EpgSources.all.filter { it.id in shown }.sumOf { it.approxMb }} MB per day",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 12.dp, bottom = 4.dp),
+                )
+                androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                    items(EpgSources.all.size) { i ->
+                        val source = EpgSources.all[i]
+                        val checked = source.id in shown
+                        Row(
+                            Modifier.fillMaxWidth().clickable(enabled = !auto) {
+                                chosen = if (checked) chosen - source.id else chosen + source.id
+                            },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(
+                                checked = checked,
+                                enabled = !auto,
+                                onCheckedChange = { chosen = if (it) chosen + source.id else chosen - source.id },
+                            )
+                            Text("${source.label}  (~${source.approxMb} MB)", modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(if (auto) null else chosen) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

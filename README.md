@@ -25,8 +25,10 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   - The player shows Now/Next, and 🕒 (or the remote's Guide button) lists the rest of today.
   - The **TV guide** tab is a grid with channels down the side, time across the top and a line at "now". Pick Favorites or a category, and tap a programme to watch.
   - 🔍 in the guide searches show titles across all channels for the next ~24 h (any word order, accents ignored). Results show when and where each show is on; what's on now comes first. Tap one to watch that channel.
-  - Guide data comes from an external XMLTV guide, by default the daily [epgshare01](https://epgshare01.online) Polish guide (about 9 MB). It's matched to your channels by name, and mybunny's own guide fills the gaps.
-  - The source URL can be changed in Settings → TV guide.
+  - Guide data comes from the daily [epgshare01](https://epgshare01.online) XMLTV guides. The app picks the countries found in your channel list automatically (e.g. Poland, US, Canada, UK, Portugal, Spain, Plex…). On a 46k-channel list that covers ~8.4k channels; PPV, event and 24/7 streams have no guide anywhere. US local stations are left out on purpose (57 MB for very few matches).
+  - Channels are matched by the provider's own EPG id first, then by name. mybunny's own guide fills gaps, favorites first.
+  - The guide is stored in an on-device database, so even very large channel lists stay fast. It updates once a day, **only on Wi-Fi** by default.
+  - Settings → TV guide lets you pick guides by hand, allow mobile data, or add an extra XMLTV URL.
 - **Search** across the whole catalog. Matching ignores case and accents and accepts words in any order ("one bbc" finds "UK: BBC One HD").
 - **Favorites** can be reordered. The order is the zapping and failover order.
 - **My lists**: create, rename, delete and reorder your own lists ("Sports", "News"…) and add channels from search.
@@ -88,7 +90,7 @@ app/src/main/java/com/mwalczak/player/
 │   ├── ServerUrls.kt       # URL normalisation, M3U link parsing, stream URLs
 │   ├── CatalogRepository.kt# in-memory + on-disk channel catalog, search
 │   ├── ChannelMatcher.kt   # finds alternate feeds of the same channel
-│   ├── epg/                # XMLTV download, streaming parse, name matching, cache
+│   ├── epg/                # guide sources, XMLTV streaming parse, matching, SQLite storage
 │   ├── LibraryStore.kt     # favorites, lists, recently watched
 │   └── SettingsStore.kt    # credentials and playback settings (DataStore)
 ├── cast/                   # phone -> TV remote (mDNS discovery + tiny HTTP receiver)

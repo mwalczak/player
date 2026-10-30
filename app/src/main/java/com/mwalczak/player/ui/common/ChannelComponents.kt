@@ -60,7 +60,6 @@ import coil.compose.SubcomposeAsyncImage
 import com.mwalczak.player.AppContainer
 import com.mwalczak.player.data.Channel
 import com.mwalczak.player.data.epg.Programme
-import com.mwalczak.player.data.epg.onAir
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.LinearProgressIndicator
 
@@ -183,9 +182,9 @@ val CardShape = RoundedCornerShape(12.dp)
 /** The programme currently on [channel], from the guide. */
 @Composable
 fun nowOnAir(container: AppContainer, channel: Channel): Programme? {
-    val epg by container.epg.state.collectAsStateWithLifecycle()
+    val onAir by container.epg.onAir.collectAsStateWithLifecycle()
     val now by container.clock.collectAsStateWithLifecycle()
-    return epg.programmes[channel.streamId]?.onAir(now)
+    return onAir[channel.streamId]?.takeIf { it.start <= now && now < it.stop }
 }
 
 fun Programme.progress(nowSec: Long): Float =
