@@ -11,7 +11,7 @@ data class RemoteDevice(val name: String, val host: String, val port: Int) {
         get() = "http://${if (host.contains(':')) "[${host.replace("%", "%25")}]" else host}:$port"
 }
 
-/** Body of `POST /command`. [type] is one of play, next, previous, stop, login. */
+/** Body of `POST /command`. [type] is one of play, next, previous, last, stop, login. */
 @Serializable
 data class RemoteRequest(
     val type: String,
@@ -40,6 +40,7 @@ sealed interface RemoteCommand {
     data class Play(val queue: PlaybackQueue) : RemoteCommand
     data object Next : RemoteCommand
     data object Previous : RemoteCommand
+    data object Last : RemoteCommand
     data object Stop : RemoteCommand
 }
 

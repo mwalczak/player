@@ -40,6 +40,9 @@ import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Button
@@ -166,6 +169,7 @@ private fun PlayerContent(
             when (command) {
                 RemoteCommand.Next -> controller.next()
                 RemoteCommand.Previous -> controller.previous()
+                RemoteCommand.Last -> controller.last()
                 RemoteCommand.Stop -> onExit()
                 is RemoteCommand.Play -> Unit // handled by navigation
             }
@@ -236,6 +240,7 @@ private fun PlayerContent(
                 when (event.key) {
                     Key.ChannelUp, Key.DirectionUp -> { controller.next(); poke(); true }
                     Key.ChannelDown, Key.DirectionDown -> { controller.previous(); poke(); true }
+                    Key.LastChannel -> { controller.last(); poke(); true }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> { panel = true; true }
                     Key.DirectionLeft, Key.DirectionRight, Key.Info, Key.Menu -> { poke(); true }
                     else -> false
@@ -324,6 +329,7 @@ private fun PlayerContent(
                 },
                 onPrevious = { controller.previous(); poke() },
                 onNext = { controller.next(); poke() },
+                onLast = { controller.last(); poke() },
             )
         }
 
@@ -367,6 +373,7 @@ private fun Overlay(
     castButton: @Composable () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    onLast: () -> Unit,
 ) {
     val scrim = Color(0xB3000000)
     Box(Modifier.fillMaxSize()) {
@@ -431,6 +438,24 @@ private fun Overlay(
                 Spacer(Modifier.width(32.dp))
                 IconButton(onClick = onNext, enabled = state.channels.size > 1) {
                     Icon(Icons.Default.SkipNext, "Next channel", tint = Color.White, modifier = Modifier.size(36.dp))
+                }
+                Spacer(Modifier.width(32.dp))
+                // "Last channel": flip between this channel and the one watched before.
+                val last = state.previousIndex?.let { state.channels.getOrNull(it) }
+                TextButton(onClick = onLast, enabled = last != null) {
+                    Icon(
+                        Icons.Default.SwapHoriz,
+                        contentDescription = null,
+                        tint = if (last != null) Color.White else Color.White.copy(alpha = 0.38f),
+                        modifier = Modifier.size(32.dp),
+                    )
+                    Text(
+                        last?.name ?: "Last channel",
+                        color = if (last != null) Color.White else Color.White.copy(alpha = 0.38f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 6.dp).widthIn(max = 180.dp),
+                    )
                 }
             }
         }

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -166,6 +167,7 @@ fun RemoteBar(container: AppContainer, modifier: Modifier = Modifier) {
             }
             IconButton(onClick = { send("previous") }) { Icon(Icons.Default.SkipPrevious, "Previous channel on TV") }
             IconButton(onClick = { send("next") }) { Icon(Icons.Default.SkipNext, "Next channel on TV") }
+            IconButton(onClick = { send("last") }) { Icon(Icons.Default.SwapHoriz, "Last channel on TV") }
             IconButton(onClick = { send("stop") }) { Icon(Icons.Default.Stop, "Stop on TV") }
             IconButton(onClick = { container.remote.select(null) }) { Icon(Icons.Default.Close, "Stop casting") }
         }

@@ -199,6 +199,7 @@ class RemoteControl(
             }
             "next" -> emit(RemoteCommand.Next)
             "previous" -> emit(RemoteCommand.Previous)
+            "last" -> emit(RemoteCommand.Last)
             "stop" -> emit(RemoteCommand.Stop)
             else -> return 400 to currentStatus(error = "unknown command")
         }

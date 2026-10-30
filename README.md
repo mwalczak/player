@@ -31,6 +31,7 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
 - **My lists**: create, rename, delete and reorder your own lists ("Sports", "News"…) and add channels from search.
 - **Player** (ExoPlayer / Media3):
   - Switch channels with swipe up/down, the ⏮ ⏭ buttons, or the remote (CH+/CH−, D-pad up/down).
+  - ⇄ **Last channel** flips between the current channel and the one you watched before. The button shows its name, and the remote's Last key works too.
   - Open the side channel list with the list button or OK on a remote.
   - Shows the current programme ("Now") and the next one from the provider's EPG.
   - Aspect modes: Fit, Zoom, Stretch. You can also favorite the channel you're watching.

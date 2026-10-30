@@ -51,6 +51,8 @@ data class PlayerUiState(
     val status: PlaybackStatus = PlaybackStatus.Loading,
     val notice: String? = null,
     val epg: List<EpgEntry> = emptyList(),
+    /** The channel watched before the current one, for the "last channel" button. */
+    val previousIndex: Int? = null,
 )
 
 /**
@@ -71,7 +73,18 @@ class PlayerController(
     val player: ExoPlayer = buildPlayer(context)
 
     private val _state = MutableStateFlow(
-        PlayerUiState(queue.title, queue.channels, queue.startIndex, queue.channels[queue.startIndex]),
+        PlayerUiState(
+            queue.title,
+            queue.channels,
+            queue.startIndex,
+            queue.channels[queue.startIndex],
+            // Coming back to the player: "last channel" starts as the channel watched before,
+            // if it is in the list being watched.
+            previousIndex = container.library.library.value.recent
+                .firstOrNull { it.streamId != queue.channels[queue.startIndex].streamId }
+                ?.let { prev -> queue.channels.indexOfFirst { it.streamId == prev.streamId } }
+                ?.takeIf { it >= 0 },
+        ),
     )
     val state: StateFlow<PlayerUiState> = _state.asStateFlow()
 
@@ -113,6 +126,11 @@ class PlayerController(
 
     fun previous() = select(_state.value.index - 1)
 
+    /** Jumps back to the channel watched before this one (and pressing again comes back). */
+    fun last() {
+        _state.value.previousIndex?.let(::select)
+    }
+
     /** User-initiated channel change: resets all failover bookkeeping. */
     fun select(index: Int) {
         val channels = _state.value.channels
@@ -120,7 +138,7 @@ class PlayerController(
         failed.clear()
         retried.clear()
         hops = 0
-        _state.update { it.copy(index = wrapped) }
+        _state.update { it.copy(index = wrapped, previousIndex = if (wrapped != it.index) it.index else it.previousIndex) }
         play(channels[wrapped], notice = null)
     }
 
