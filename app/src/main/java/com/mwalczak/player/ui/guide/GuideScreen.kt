@@ -54,6 +54,10 @@ import com.mwalczak.player.data.Channel
 import com.mwalczak.player.data.epg.Programme
 import com.mwalczak.player.ui.Actions
 import com.mwalczak.player.ui.common.ChannelLogo
+import com.mwalczak.player.ui.common.PreviewPane
+import com.mwalczak.player.ui.common.PreviewState
+import com.mwalczak.player.ui.common.previewEnabled
+import androidx.compose.ui.focus.onFocusChanged
 import com.mwalczak.player.ui.common.EmptyState
 import com.mwalczak.player.ui.common.focusHighlight
 import com.mwalczak.player.ui.home.WithCatalog
@@ -156,8 +160,23 @@ fun GuideTab(container: AppContainer, actions: Actions) {
                 channels.isEmpty() -> EmptyState("No channels here.")
                 epg.channelsWithGuide == 0 && epg.loading -> EmptyState("Loading the TV guide… ${epg.progress.orEmpty()}")
                 epg.channelsWithGuide == 0 -> EmptyState("No guide yet. Download it in Settings → TV guide → Download guide now.")
-                else -> GuideGrid(container, channels, epg.version, scroll) { index ->
-                    actions.play(title, channels, index)
+                else -> if (previewEnabled(container)) {
+                    // Browse the guide with a live preview of the focused / tapped channel.
+                    val preview = remember(channels) { PreviewState() }
+                    val fullscreen: (Int) -> Unit = { index ->
+                        preview.stop(container)
+                        actions.play(title, channels, index)
+                    }
+                    Row(Modifier.fillMaxSize()) {
+                        GuideGrid(
+                            container, channels, epg.version, scroll,
+                            onRowFocus = { preview.index = it },
+                            modifier = Modifier.weight(1f),
+                        ) { index, focused -> if (focused || preview.index == index) fullscreen(index) else preview.index = index }
+                        PreviewPane(container, channels, preview, fullscreen, Modifier.weight(0.6f))
+                    }
+                } else {
+                    GuideGrid(container, channels, epg.version, scroll) { index, _ -> actions.play(title, channels, index) }
                 }
             }
         }
@@ -176,8 +195,13 @@ private fun GuideGrid(
     channels: List<Channel>,
     version: Int,
     scroll: ScrollState,
-    onPlay: (Int) -> Unit,
+    onRowFocus: ((Int) -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    /** index, and whether a TV remote is on that row (OK) rather than a touch tap. */
+    onClick: (Int, Boolean) -> Unit,
 ) {
+    var focusedRow by remember { mutableStateOf(-1) }
+    val onPlay: (Int) -> Unit = { index -> onClick(index, focusedRow == index) }
     val now by container.clock.collectAsStateWithLifecycle()
     // The window starts at the half hour before now and stays put while the screen is open.
     val windowStart = remember { (System.currentTimeMillis() / 1000 - SLOT_SEC) / SLOT_SEC * SLOT_SEC }
@@ -185,7 +209,7 @@ private fun GuideGrid(
     val timeFormat = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
     val density = LocalDensity.current
 
-    Box(Modifier.fillMaxSize()) {
+    Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             // Time ruler
             Row(Modifier.fillMaxWidth().height(28.dp)) {
@@ -207,7 +231,20 @@ private fun GuideGrid(
             }
             LazyColumn(Modifier.fillMaxSize()) {
                 itemsIndexed(channels, key = { _, c -> c.streamId }) { index, channel ->
-                    Row(Modifier.fillMaxWidth().height(RowHeight).padding(vertical = 2.dp)) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(RowHeight)
+                            .padding(vertical = 2.dp)
+                            .onFocusChanged { f ->
+                                if (f.hasFocus) {
+                                    focusedRow = index
+                                    onRowFocus?.invoke(index)
+                                } else if (focusedRow == index) {
+                                    focusedRow = -1
+                                }
+                            },
+                    ) {
                         ChannelCell(channel) { onPlay(index) }
                         Row(Modifier.horizontalScroll(scroll)) {
                             // Each row reads its own channel from the guide database as it scrolls into view.

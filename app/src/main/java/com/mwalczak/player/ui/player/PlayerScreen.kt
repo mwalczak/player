@@ -155,7 +155,10 @@ private fun PlayerContent(
     // starting would most likely cut off whoever is watching. Skipped when a phone hands its
     // stream over to this TV (the "other viewer" is that phone).
     var busyWarning by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    var cleared by remember { mutableStateOf(queue.fromRemote) }
+    // Also skipped right after the browsing preview handed its stream over: that "other viewer" is us.
+    var cleared by remember {
+        mutableStateOf(queue.fromRemote || System.currentTimeMillis() - container.previewStoppedAtMillis < 15_000)
+    }
     LaunchedEffect(Unit) {
         if (!cleared) {
             val usage = controller.connectionUsage()

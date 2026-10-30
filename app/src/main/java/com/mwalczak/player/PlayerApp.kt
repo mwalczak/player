@@ -82,6 +82,9 @@ class AppContainer(context: Context) {
     /** Favorites and list channels get the provider's guide first when no XMLTV guide covers them. */
     private fun guidePriority(): List<Channel> = library.library.value.let { lib -> lib.favorites + lib.lists.flatMap { it.channels } }
 
+    /** When the browsing preview last let go of its stream (it hands over to full screen). */
+    @Volatile var previewStoppedAtMillis: Long = 0
+
     /** Set right before navigating to the player screen. */
     var pendingQueue: PlaybackQueue? = null
 }

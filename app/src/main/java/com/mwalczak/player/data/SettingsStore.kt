@@ -39,6 +39,14 @@ class SettingsStore(private val context: Context) {
         val epgSources = stringPreferencesKey("epg_sources")
         val epgWifiOnly = booleanPreferencesKey("epg_wifi_only")
         val gridColumns = intPreferencesKey("grid_columns")
+        val preview = booleanPreferencesKey("preview_while_browsing")
+    }
+
+    /** Live preview next to channel lists on wide screens (TV, tablet, landscape phone). */
+    val previewWhileBrowsing: Flow<Boolean> = context.dataStore.data.map { it[Keys.preview] ?: true }
+
+    suspend fun setPreviewWhileBrowsing(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.preview] = enabled }
     }
 
     /** Columns in channel lists on this device; 0 = as many as fit. Not copied to other devices. */

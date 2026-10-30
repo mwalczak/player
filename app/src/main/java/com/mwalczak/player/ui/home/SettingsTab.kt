@@ -106,6 +106,7 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
         }
     }
     val gridColumns by container.settings.gridColumns.collectAsStateWithLifecycle(0)
+    val previewWhileBrowsing by container.settings.previewWhileBrowsing.collectAsStateWithLifecycle(true)
     var copyingToTv by remember { mutableStateOf(false) }
     val importContext = LocalContext.current
     var exporting by remember { mutableStateOf(false) }
@@ -183,6 +184,13 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             modifier = Modifier.clickable {
                 scope.launch { container.settings.setGridColumns(if (gridColumns >= 4) 0 else gridColumns + 1) }
             },
+        )
+
+        ListItem(
+            headlineContent = { Text("Live preview while browsing") },
+            supportingContent = { Text("On TV, tablet and landscape phone: the selected channel plays next to the list; OK or a second tap opens full screen") },
+            trailingContent = { Switch(checked = previewWhileBrowsing, onCheckedChange = null) },
+            modifier = Modifier.clickable { scope.launch { container.settings.setPreviewWhileBrowsing(!previewWhileBrowsing) } },
         )
 
         SectionHeader(startPadding = 16.dp, text = "Stream format")

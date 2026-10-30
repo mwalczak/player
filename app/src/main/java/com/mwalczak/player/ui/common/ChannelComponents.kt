@@ -52,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -102,6 +103,8 @@ fun ChannelRow(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     trailing: @Composable () -> Unit = {},
+    /** Told when a TV remote moves onto / off this row (drives the browsing preview). */
+    onFocusChange: ((Boolean) -> Unit)? = null,
 ) {
     val library by container.library.library.collectAsStateWithLifecycle()
     val isFavorite = library.favorites.any { it.streamId == channel.streamId }
@@ -116,6 +119,7 @@ fun ChannelRow(
             .clip(CardShape)
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .focusHighlight(interaction)
+            .then(if (onFocusChange != null) Modifier.onFocusChanged { onFocusChange(it.hasFocus) } else Modifier)
             .combinedClickable(
                 interactionSource = interaction,
                 indication = LocalIndication.current,
@@ -211,16 +215,44 @@ fun ChannelGrid(
     subtitle: (index: Int, channel: Channel) -> String? = { _, _ -> null },
 ) {
     val fixed by container.settings.gridColumns.collectAsStateWithLifecycle(0)
-    LazyVerticalGrid(
-        columns = if (fixed > 0) GridCells.Fixed(fixed) else GridCells.Adaptive(minSize = GRID_MIN_CELL),
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        itemsIndexed(channels, key = { _, c -> c.streamId }) { index, channel ->
-            ChannelRow(container, channel, onClick = { onPlay(index) }, subtitle = subtitle(index, channel))
+    val grid: @Composable (Modifier, (Int, Boolean) -> Unit, ((Int, Boolean) -> Unit)?) -> Unit = { gridModifier, click, focus ->
+        LazyVerticalGrid(
+            columns = if (fixed > 0) GridCells.Fixed(fixed) else GridCells.Adaptive(minSize = GRID_MIN_CELL),
+            modifier = gridModifier.fillMaxSize(),
+            contentPadding = PaddingValues(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            itemsIndexed(channels, key = { _, c -> c.streamId }) { index, channel ->
+                var focused by remember { mutableStateOf(false) }
+                ChannelRow(
+                    container,
+                    channel,
+                    onClick = { click(index, focused) },
+                    subtitle = subtitle(index, channel),
+                    onFocusChange = focus?.let { f -> { has -> focused = has; f(index, has) } },
+                )
+            }
         }
+    }
+
+    if (!previewEnabled(container)) {
+        grid(modifier, { index, _ -> onPlay(index) }, null)
+        return
+    }
+    // Wide screens: browse with a live preview; OK on a focused row (or a second tap) goes full screen.
+    val preview = remember { PreviewState() }
+    val fullscreen: (Int) -> Unit = { index ->
+        preview.stop(container)
+        onPlay(index)
+    }
+    Row(modifier.fillMaxSize()) {
+        grid(
+            Modifier.weight(1f),
+            { index, focused -> if (focused || preview.index == index) fullscreen(index) else preview.index = index },
+            { index, has -> if (has) preview.index = index },
+        )
+        PreviewPane(container, channels, preview, fullscreen, Modifier.weight(0.75f))
     }
 }
 

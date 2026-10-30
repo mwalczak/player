@@ -68,6 +68,8 @@ class PlayerController(
     private val creds: Credentials,
     queue: PlaybackQueue,
     private val scope: CoroutineScope,
+    /** False for the small preview while browsing: it shouldn't fill "Recently watched". */
+    private val recordRecent: Boolean = true,
 ) {
     var settings: PlaybackSettings = PlaybackSettings()
 
@@ -184,7 +186,7 @@ class PlayerController(
     private fun onPlaying() {
         stallJob?.cancel()
         val current = _state.value
-        if (current.status != PlaybackStatus.Playing) container.library.addRecent(current.playing)
+        if (recordRecent && current.status != PlaybackStatus.Playing) container.library.addRecent(current.playing)
         failed.clear()
         retried.clear()
         hops = 0
