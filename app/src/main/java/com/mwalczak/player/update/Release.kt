@@ -17,6 +17,8 @@ data class UpdateState(
     val progress: Float = -1f,
     /** Shown instead of the usual "update available" text, e.g. after an error. */
     val message: String? = null,
+    /** Why the last check for updates failed, if it did. */
+    val checkError: String? = null,
 ) {
     val available: Boolean get() = currentBuild > 1 && latestBuild > currentBuild
     val busy: Boolean get() = progress >= 0f

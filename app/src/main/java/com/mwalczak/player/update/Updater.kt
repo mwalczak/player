@@ -68,16 +68,20 @@ class Updater(
                 val latest = http.newCall(Request.Builder().url(Releases.LATEST_RELEASE_API)
                     .header("Accept", "application/vnd.github+json").build())
                     .execute().use { r ->
-                        if (!r.isSuccessful) throw IOException("HTTP ${r.code}")
+                        when {
+                            // GitHub answers 404 for releases of private repositories to anonymous apps.
+                            r.code == 404 -> throw IOException("GitHub releases not reachable (HTTP 404) – is the repository private?")
+                            !r.isSuccessful -> throw IOException("GitHub answered HTTP ${r.code}")
+                        }
                         Releases.parseLatest(r.body?.string().orEmpty())
+                            ?: throw IOException("The latest release has no ${Releases.APK_NAME}")
                     }
-                if (latest != null) {
-                    release = latest
-                    _state.update { it.copy(latestBuild = latest.build) }
-                }
+                release = latest
+                _state.update { it.copy(latestBuild = latest.build, checkError = null) }
             } catch (e: Exception) {
-                // No internet or GitHub unhappy: just try again later.
+                // Shown in Settings; checked again on the next start / resume.
                 lastCheck = 0L
+                _state.update { it.copy(checkError = e.message ?: "No internet connection?") }
             }
         }
     }

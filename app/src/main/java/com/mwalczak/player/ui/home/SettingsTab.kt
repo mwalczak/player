@@ -183,6 +183,9 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
                 Text(
                     when {
                         update.currentBuild <= 1 -> "Local build – updates only for builds from GitHub"
+                        update.message != null -> update.message!!
+                        update.busy -> "Downloading update… ${(update.progress * 100).toInt()}%"
+                        update.checkError != null -> "Couldn't check for updates: ${update.checkError}"
                         update.available -> "Build ${update.latestBuild} is available – tap to update"
                         update.latestBuild > 0 -> "Up to date"
                         else -> "Tap to check for updates"
