@@ -74,6 +74,7 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons)
     debugImplementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.test.manifest)
 
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.hls)
@@ -91,4 +92,7 @@ dependencies {
     // Runs real Android code (SQLite, app startup) in unit tests.
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
+    // Drives Compose screens (drag and drop, remote keys) in Robolectric tests.
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
 }

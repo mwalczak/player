@@ -31,7 +31,7 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   - Settings → TV guide lets you pick guides by hand, allow mobile data, or add an extra XMLTV URL.
 - **Live TV** lists all categories, pinned ones on top. The field at the top filters them (any word order, accents ignored, e.g. "pol sport").
 - **Search** across the whole catalog. Matching ignores case and accents and accepts words in any order ("one bbc" finds "UK: BBC One HD").
-- **Favorites** can be reordered, by hand or **A–Z** (with Undo). The order is the zapping and failover order.
+- **Favorites** can be reordered: drag a channel by its ≡ handle (on a TV remote: OK on ≡, then ▲/▼, then OK), or tap **A–Z** (with Undo). The order is the zapping and failover order.
 - **My lists**: create, rename, delete and reorder (by hand or A–Z) your own lists ("Sports", "News"…) and add channels from search.
 - **Player** (ExoPlayer / Media3):
   - Switch channels with swipe up/down, the ⏮ ⏭ buttons, or the remote (◀ ▶ or CH+/CH−).
