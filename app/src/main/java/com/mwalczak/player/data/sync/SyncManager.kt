@@ -3,7 +3,7 @@ package com.mwalczak.player.data.sync
 import android.content.Context
 import com.mwalczak.player.CrashReports
 import com.mwalczak.player.cast.SyncPayload
-import com.mwalczak.player.data.Backups
+import com.mwalczak.player.data.Libraries
 import com.mwalczak.player.data.CatalogRepository
 import com.mwalczak.player.data.Credentials
 import com.mwalczak.player.data.Library
@@ -207,7 +207,7 @@ class SyncManager(
                 when {
                     // First time on this device (e.g. after a reinstall): take what's saved, plus anything already here.
                     known == null -> {
-                        val merged = if (local.library.isEmpty()) saved.data else saved.data.withLibrary(Backups.merge(saved.data.library, local.library))
+                        val merged = if (local.library.isEmpty()) saved.data else saved.data.withLibrary(Libraries.merge(saved.data.library, local.library))
                         apply(merged)
                         if (merged == saved.data) record(saved.code, saved.revision) else save(key, saved.revision, merged)
                     }
@@ -217,7 +217,7 @@ class SyncManager(
                     }
                     // Changed here and elsewhere: keep both.
                     else -> {
-                        val merged = saved.data.withLibrary(Backups.merge(saved.data.library, local.library))
+                        val merged = saved.data.withLibrary(Libraries.merge(saved.data.library, local.library))
                         apply(merged)
                         save(key, saved.revision, merged)
                     }
@@ -235,7 +235,7 @@ class SyncManager(
             }
             is Saved.Conflict -> {
                 val current = result.current
-                val merged = current.data.withLibrary(Backups.merge(current.data.library, payload.library))
+                val merged = current.data.withLibrary(Libraries.merge(current.data.library, payload.library))
                 apply(merged)
                 if (retry) save(key, current.revision, merged, retry = false) else record(current.code, current.revision)
             }
@@ -269,7 +269,7 @@ class SyncManager(
     }
 
     /** Someone else's channels, pointed at this account's (their provider may number them differently). */
-    private fun remapped(payload: SyncPayload) = payload.withLibrary(Backups.remap(payload.library, catalog.catalog?.channels))
+    private fun remapped(payload: SyncPayload) = payload.withLibrary(Libraries.remap(payload.library, catalog.catalog?.channels))
 
     private fun keyFor(creds: Credentials): String =
         cachedKey?.takeIf { it.first == creds }?.second ?: SyncKey.forLogin(creds).also { cachedKey = creds to it }

@@ -2,53 +2,13 @@ package com.mwalczak.player.data
 
 import com.mwalczak.player.cast.SyncPayload
 import kotlinx.coroutines.flow.first
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
 
-/** Login inside a backup file; only present when the user explicitly chose to include it. */
-@Serializable
-data class BackupLogin(val server: String, val username: String, val password: String)
-
-/** The export / import file: favorites, lists, pinned categories and settings. */
-@Serializable
-data class Backup(
-    val app: String = APP_ID,
-    val version: Int = 1,
-    val exportedAtMillis: Long = 0,
-    val data: SyncPayload,
-    val login: BackupLogin? = null,
-) {
-    companion object {
-        const val APP_ID = "bunny-player"
-    }
-}
-
-object Backups {
-    private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true }
-
-    /** The file holds only what was set up (favorites, lists, …): no "recently watched", not even empty. */
-    fun encode(backup: Backup): String {
-        val tree = json.encodeToJsonElement(Backup.serializer(), backup).jsonObject
-        val data = tree.getValue("data").jsonObject
-        val library = JsonObject(data.getValue("library").jsonObject - "recent")
-        return json.encodeToString(JsonElement.serializer(), JsonObject(tree + ("data" to JsonObject(data + ("library" to library)))))
-    }
-
-    /** Parses a backup file, rejecting anything that isn't one of ours. */
-    fun decode(text: String): Backup {
-        val backup = runCatching { json.decodeFromString(Backup.serializer(), text) }
-            .getOrElse { throw IllegalArgumentException("This isn't a Bunny Player settings file.") }
-        require(backup.app == Backup.APP_ID) { "This isn't a Bunny Player settings file." }
-        return backup
-    }
-
+/** Combining and matching favorites and lists that come from another device or person. */
+object Libraries {
     /**
-     * Points imported channels at this account's catalog: same stream id if it exists, otherwise
-     * the channel with the same name (another provider numbers its streams differently).
-     * Channels that can't be found are kept as they are.
+     * Points channels from someone else's setup at this account's catalog: same stream id if it
+     * exists, otherwise the channel with the same name (another provider numbers its streams
+     * differently). Channels that can't be found are kept as they are.
      */
     fun remap(library: Library, catalog: List<Channel>?): Library {
         if (catalog.isNullOrEmpty()) return library

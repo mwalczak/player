@@ -47,11 +47,6 @@ import androidx.compose.ui.unit.dp
 import com.mwalczak.player.AppContainer
 import com.mwalczak.player.data.Credentials
 import com.mwalczak.player.data.ServerUrls
-import com.mwalczak.player.data.applySyncPayload
-import com.mwalczak.player.ui.common.rememberImportPicker
-import com.mwalczak.player.ui.common.summary
-import androidx.compose.material.icons.filled.FileOpen
-import androidx.compose.material3.OutlinedButton
 import kotlinx.coroutines.launch
 
 @Composable
@@ -68,38 +63,6 @@ fun LoginScreen(container: AppContainer, onLoggedIn: () -> Unit) {
 
     LaunchedEffect(Unit) {
         if (server.isEmpty()) server = container.settings.lastServer().orEmpty()
-    }
-
-    var info by remember { mutableStateOf<String?>(null) }
-
-    // Settings file from a friend or another device: applies favorites/settings and, if the file
-    // carries a login, signs in with it straight away.
-    val pickImport = rememberImportPicker { backup ->
-        error = null
-        info = null
-        scope.launch {
-            applySyncPayload(container.settings, container.library, backup.data)
-            val login = backup.login
-            if (login == null) {
-                info = "Imported ${backup.summary()}. Now sign in with your account."
-                return@launch
-            }
-            val creds = Credentials(ServerUrls.normalizeServer(login.server), login.username, login.password)
-            server = creds.server
-            username = creds.username
-            password = creds.password
-            busy = true
-            try {
-                container.xtream.authenticate(creds)
-                container.settings.saveCredentials(creds)
-                container.appScope.launch { container.catalog.load(creds, force = true) }
-                onLoggedIn()
-            } catch (e: Exception) {
-                error = "The login in the file didn't work: ${e.message ?: "could not connect"}"
-            } finally {
-                busy = false
-            }
-        }
     }
 
     fun signIn() {
@@ -193,7 +156,6 @@ fun LoginScreen(container: AppContainer, onLoggedIn: () -> Unit) {
             )
 
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-            info?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
 
             Button(onClick = ::signIn, enabled = !busy, modifier = Modifier.fillMaxWidth().height(48.dp)) {
                 if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Sign in")
@@ -201,10 +163,11 @@ fun LoginScreen(container: AppContainer, onLoggedIn: () -> Unit) {
             TextButton(onClick = { showM3u = !showM3u }) {
                 Text(if (showM3u) "Hide M3U link" else "I have an M3U link instead")
             }
-            OutlinedButton(onClick = pickImport, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.FileOpen, contentDescription = null)
-                Text("  Import settings file")
-            }
+            Text(
+                "Your favorites, lists and settings come back automatically after you sign in.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(
                 "Version ${com.mwalczak.player.BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.labelSmall,
