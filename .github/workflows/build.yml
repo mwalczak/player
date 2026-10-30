@@ -47,7 +47,23 @@ jobs:
       # https://github.com/mwalczak/player/releases/latest/download/bunny-player.apk
       # and installed apps offer it as an update.
       - name: Publish release
+        id: publish
+        continue-on-error: true
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Bunny Player build ${{ github.run_number }}
+          body: |
+            Built from ${{ github.sha }}.
+            Download bunny-player.apk on the phone / tablet / TV and open it to install.
+            Already installed? The app offers this update by itself.
+          files: bunny-player.apk
+          make_latest: true
+
+      # GitHub occasionally fails a release upload (e.g. "tag not discoverable"); try once more.
+      - name: Publish release (retry)
+        if: steps.publish.outcome == 'failure'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
