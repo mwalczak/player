@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,6 +51,9 @@ import com.mwalczak.player.data.Channel
 import com.mwalczak.player.ui.Actions
 import com.mwalczak.player.ui.common.ChannelLogo
 import com.mwalczak.player.ui.common.ChannelGrid
+import com.mwalczak.player.data.sortedByName
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.SortByAlpha
 import com.mwalczak.player.ui.common.EmptyState
 import com.mwalczak.player.ui.home.SearchContent
 import com.mwalczak.player.ui.home.WithCatalog
@@ -89,6 +93,7 @@ fun FavoritesTab(container: AppContainer, actions: Actions) {
         onToggleReorder = { reordering = !reordering },
         onPlay = { index -> actions.play("Favorites", library.favorites, index) },
         onMove = container.library::moveFavorite,
+        onReorder = container.library::reorderFavorites,
         onRemove = container.library::toggleFavorite,
     )
 }
@@ -105,9 +110,14 @@ private fun OrderedChannelList(
     onToggleReorder: () -> Unit,
     onPlay: (Int) -> Unit,
     onMove: (Int, Int) -> Unit,
+    /** Puts the channels in this order (A–Z, or back to how they were). */
+    onReorder: (List<Channel>) -> Unit,
     onRemove: (Channel) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // The order before "A–Z", so it can be undone while reordering.
+    var beforeSort by remember { mutableStateOf<List<Channel>?>(null) }
+    LaunchedEffect(reordering) { if (!reordering) beforeSort = null }
     if (channels.isEmpty()) {
         EmptyState(emptyText, modifier)
         return
@@ -124,9 +134,20 @@ private fun OrderedChannelList(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row {
-                TextButton(onClick = { onPlay(0) }) {
-                    Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null)
-                    Text(" Play all")
+                val undo = beforeSort?.takeIf { it != channels && channels == channels.sortedByName() }
+                when {
+                    !reordering -> TextButton(onClick = { onPlay(0) }) {
+                        Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null)
+                        Text(" Play all")
+                    }
+                    undo != null -> TextButton(onClick = { onReorder(undo); beforeSort = null }) {
+                        Icon(Icons.AutoMirrored.Filled.Undo, null)
+                        Text(" Undo A–Z")
+                    }
+                    else -> TextButton(onClick = { beforeSort = channels; onReorder(channels.sortedByName()) }) {
+                        Icon(Icons.Default.SortByAlpha, null)
+                        Text(" A–Z")
+                    }
                 }
                 TextButton(onClick = onToggleReorder) {
                     Icon(if (reordering) Icons.Default.Check else Icons.Default.SwapVert, null)
@@ -271,6 +292,7 @@ fun ListDetailScreen(container: AppContainer, actions: Actions, listId: String) 
                 onToggleReorder = { reordering = !reordering },
                 onPlay = { index -> actions.play(list.name, list.channels, index) },
                 onMove = { from, to -> container.library.moveInList(listId, from, to) },
+                onReorder = { container.library.reorderList(listId, it) },
                 onRemove = { container.library.toggleInList(listId, it) },
             )
         }

@@ -112,10 +112,6 @@ fun AppNavigation(container: AppContainer) {
         container.remote.commands.collect { command ->
             when (command) {
                 is RemoteCommand.Play -> actions.playLocally(command.queue)
-                RemoteCommand.Synced -> {
-                    if (nav.currentDestination?.route == Routes.LOGIN) actions.loggedIn()
-                    Toast.makeText(context, "Favorites and settings copied from your phone", Toast.LENGTH_LONG).show()
-                }
                 else -> Unit
             }
         }

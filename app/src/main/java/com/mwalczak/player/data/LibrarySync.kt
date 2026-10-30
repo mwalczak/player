@@ -1,6 +1,6 @@
 package com.mwalczak.player.data
 
-import com.mwalczak.player.cast.SyncPayload
+import com.mwalczak.player.data.sync.SyncPayload
 import kotlinx.coroutines.flow.first
 
 /** Combining and matching favorites and lists that come from another device or person. */

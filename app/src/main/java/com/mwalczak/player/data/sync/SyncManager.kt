@@ -2,7 +2,6 @@ package com.mwalczak.player.data.sync
 
 import android.content.Context
 import com.mwalczak.player.CrashReports
-import com.mwalczak.player.cast.SyncPayload
 import com.mwalczak.player.data.Libraries
 import com.mwalczak.player.data.CatalogRepository
 import com.mwalczak.player.data.Credentials

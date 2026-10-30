@@ -50,6 +50,9 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
 
     fun moveFavorite(from: Int, to: Int) = update { it.copy(favorites = it.favorites.move(from, to)) }
 
+    /** Puts favorites in the order of [order], e.g. A–Z or back to how they were. */
+    fun reorderFavorites(order: List<Channel>) = update { it.copy(favorites = it.favorites.inOrderOf(order)) }
+
     fun createList(name: String): String {
         val id = UUID.randomUUID().toString()
         update { it.copy(lists = it.lists + UserList(id, name.trim())) }
@@ -66,6 +69,8 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
     }
 
     fun moveInList(listId: String, from: Int, to: Int) = updateList(listId) { it.copy(channels = it.channels.move(from, to)) }
+
+    fun reorderList(listId: String, order: List<Channel>) = updateList(listId) { it.copy(channels = it.channels.inOrderOf(order)) }
 
     fun togglePinnedCategory(id: String) = update { lib ->
         lib.copy(pinnedCategories = if (id in lib.pinnedCategories) lib.pinnedCategories - id else lib.pinnedCategories + id)

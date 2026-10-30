@@ -30,8 +30,8 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   - The guide is stored in an on-device database, so even very large channel lists stay fast. For now it downloads **only when you tap Settings → TV guide → Download guide now** (Wi-Fi only by default).
   - Settings → TV guide lets you pick guides by hand, allow mobile data, or add an extra XMLTV URL.
 - **Search** across the whole catalog. Matching ignores case and accents and accepts words in any order ("one bbc" finds "UK: BBC One HD").
-- **Favorites** can be reordered. The order is the zapping and failover order.
-- **My lists**: create, rename, delete and reorder your own lists ("Sports", "News"…) and add channels from search.
+- **Favorites** can be reordered, by hand or **A–Z** (with Undo). The order is the zapping and failover order.
+- **My lists**: create, rename, delete and reorder (by hand or A–Z) your own lists ("Sports", "News"…) and add channels from search.
 - **Player** (ExoPlayer / Media3):
   - Switch channels with swipe up/down, the ⏮ ⏭ buttons, or the remote (◀ ▶ or CH+/CH−).
   - On a TV remote, **▲** jumps to the controls at the top (☆ favorite, add to list, aspect, cast, schedule, channel list) and **▼** to the ⏮ ⏭ ⇄ buttons. Move with ◀ ▶, press OK, and Back returns to the picture. A white ring shows the selected button.
@@ -42,14 +42,13 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
 - **Cast to TV over Wi-Fi** (phone as remote): open Bunny Player on the TV, then on the phone tap 📺 (top of the side rail, or in the player) and pick the TV.
   - Any channel you tap on the phone now plays on the TV, and a bar shows what's on with ⏮ ⏭ ■ controls.
   - Casting from the player hands over the channel you're watching.
-  - If the TV app isn't signed in, the phone sets it up like itself: login, favorites, lists, pinned categories and settings. A signed-in TV with no favorites gets yours too.
+  - If the TV app isn't signed in, the phone signs it in with the same login, and the TV gets favorites, lists and settings through sync.
   - Devices find each other with mDNS (`_bunnyplayer._tcp`) and talk over plain HTTP on the local network. The TV uses its own player, so `.ts` streams and failover work exactly as they do on the TV. This avoids Chromecast, whose receiver can't play raw `.ts` and needs CORS headers that IPTV servers don't send.
 - **Sync & sharing** (Settings → *Sync & sharing*): favorites, lists, pinned categories and playback/guide settings are saved online on the sync server ([server/](server/), deployed to `bunny.walczaki.com`).
   - Every device signed in with the same mybunny login shares one setup, both ways. After a reinstall, signing in brings everything back. The server never sees the login: the app derives a key from it (PBKDF2) and the server stores only a hash of that key.
   - Each setup has a share code (e.g. `ABCD-EFGH`). A friend enters it under *Use someone's setup* and either **follows** it (their device shows your setup and gets your changes) or **copies it once** and makes it their own. Logins are never shared this way.
   - The app syncs when it opens, every 5 minutes while open, and a moment after each change. A fresh install never uploads its empty setup over the saved one.
   - **History**: the server keeps the last 100 versions, each with the time, the device name and the IP address it was saved from. Saves from the same device and address within 2 minutes count as one version. Settings → Sync & sharing → *History* lists them; picking one restores it on every device signed in with that login. The version it replaces stays in the history.
-- **Copy to TV**: Settings → *Copy favorites & settings to TV* sends your favorites (in order), lists, pinned categories, playback and guide settings and login to the TV app over Wi-Fi, so you don't set everything up twice. Open Bunny Player on the TV first.
 - **Shared accounts**:
   - Before playback starts, the app checks how many streams the account is using. If all are taken (e.g. 1 of 1), it warns that starting will probably cut off whoever is watching, with **Watch anyway** / **Cancel**.
   - If your stream is refused while all connections are in use, the player says someone else started watching instead of hopping through channels. **Retry** takes the stream back.

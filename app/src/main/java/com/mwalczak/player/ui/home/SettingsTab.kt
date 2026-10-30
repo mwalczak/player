@@ -32,16 +32,11 @@ import com.mwalczak.player.data.AccountInfo
 import com.mwalczak.player.data.CatalogState
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Checkbox
-import com.mwalczak.player.cast.RemoteDevice
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalContext
 import com.mwalczak.player.data.EpgSettings
 import com.mwalczak.player.data.epg.EpgSource
 import com.mwalczak.player.data.epg.EpgSources
@@ -98,19 +93,6 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
     }
     val gridColumns by container.settings.gridColumns.collectAsStateWithLifecycle(0)
     val previewWhileBrowsing by container.settings.previewWhileBrowsing.collectAsStateWithLifecycle(true)
-    var copyingToTv by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-
-    if (copyingToTv) {
-        CopyToTvDialog(container, onDismiss = { copyingToTv = false }) { device ->
-            copyingToTv = false
-            scope.launch {
-                container.remote.syncTo(device)
-                    .onSuccess { Toast.makeText(context, "Copied to ${device.name}", Toast.LENGTH_LONG).show() }
-                    .onFailure { Toast.makeText(context, "${device.name}: ${it.message}", Toast.LENGTH_LONG).show() }
-            }
-        }
-    }
 
     if (editingEpgUrl) {
         var url by remember { mutableStateOf(epgSettings.url) }
@@ -264,14 +246,6 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
         SectionHeader(startPadding = 16.dp, text = "Sync & sharing")
         SyncSection(container, creds?.username)
 
-        SectionHeader(startPadding = 16.dp, text = "Other devices")
-        ListItem(
-            headlineContent = { Text("Copy favorites & settings to TV") },
-            supportingContent = { Text("Favorites, lists, pinned categories, settings and login – open Bunny Player on the TV first") },
-            leadingContent = { Icon(Icons.Default.Tv, null) },
-            modifier = Modifier.clickable { copyingToTv = true },
-        )
-
         SectionHeader(startPadding = 16.dp, text = "App")
         ListItem(
             headlineContent = { Text("Version ${BuildConfig.VERSION_NAME}") },
@@ -321,53 +295,6 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             },
         )
     }
-}
-
-/** Pick a TV running Bunny Player, then confirm before overwriting its favorites and settings. */
-@Composable
-private fun CopyToTvDialog(container: AppContainer, onDismiss: () -> Unit, onCopy: (RemoteDevice) -> Unit) {
-    val devices by container.remote.devices.collectAsStateWithLifecycle()
-    var confirm by remember { mutableStateOf<RemoteDevice?>(null) }
-    val target = confirm
-    if (target != null) {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("Copy to ${target.name}?") },
-            text = { Text("Favorites, lists, pinned categories and settings on ${target.name} will be replaced with the ones from this device.") },
-            confirmButton = { TextButton(onClick = { onCopy(target) }) { Text("Copy") } },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-        )
-        return
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Copy to which TV?") },
-        text = {
-            Column {
-                devices.forEach { device ->
-                    ListItem(
-                        headlineContent = { Text(device.name) },
-                        supportingContent = { Text(device.host) },
-                        leadingContent = { Icon(Icons.Default.Tv, null) },
-                        modifier = Modifier.clickable { confirm = device },
-                    )
-                }
-                Row(
-                    Modifier.padding(top = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                    Text(
-                        "Looking for TVs… Open Bunny Player on the TV, on the same Wi-Fi.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-    )
 }
 
 @Composable

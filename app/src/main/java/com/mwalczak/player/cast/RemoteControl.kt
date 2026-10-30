@@ -8,8 +8,6 @@ import android.provider.Settings
 import com.mwalczak.player.PlaybackQueue
 import com.mwalczak.player.data.CatalogRepository
 import com.mwalczak.player.data.Credentials
-import com.mwalczak.player.data.applySyncPayload
-import com.mwalczak.player.data.currentSyncPayload
 import com.mwalczak.player.data.LibraryStore
 import kotlinx.coroutines.flow.first
 import com.mwalczak.player.data.SettingsStore
@@ -121,41 +119,23 @@ class RemoteControl(
     // ---------------------------------------------------------------------------------------
     // Sender
 
-    /** Plays [queue] on [device]; signs the device in with our account first if needed. */
+    /**
+     * Plays [queue] on [device]; signs the device in with our account first if needed (it then
+     * gets favorites, lists and settings from the sync server like any device with that login).
+     */
     suspend fun play(device: RemoteDevice, queue: PlaybackQueue): Result<RemoteStatus> = withContext(Dispatchers.IO) {
         runCatching {
             val request = RemoteRequest("play", queue.title, queue.channels, queue.startIndex)
             var status = send(device, request)
             if (status.error == NOT_SIGNED_IN) {
-                // A fresh TV: set it up like this device (login, favorites, lists, settings).
-                sendSync(device)
+                val creds = settings.currentCredentials() ?: throw IOException("Sign in on this device first")
+                send(device, RemoteRequest("login", server = creds.server, username = creds.username, password = creds.password))
+                    .error?.let { throw IOException(it) }
                 status = send(device, request)
-            } else if (status.favorites == 0 && library.library.value.favorites.isNotEmpty()) {
-                // Signed in but no favorites yet (e.g. signed in by an older version): copy them over.
-                runCatching { sendSync(device) }
             }
             status.error?.let { throw IOException(it) }
             status
         }
-    }
-
-    /**
-     * "Copy to TV": replaces favorites, lists, pinned categories and settings on [device] with
-     * this device's, and signs it in with our account.
-     */
-    suspend fun syncTo(device: RemoteDevice): Result<RemoteStatus> = withContext(Dispatchers.IO) {
-        runCatching { sendSync(device) }
-    }
-
-    private suspend fun sendSync(device: RemoteDevice): RemoteStatus {
-        val creds = settings.currentCredentials() ?: throw IOException("Sign in on this device first")
-        val payload = currentSyncPayload(settings, library)
-        val status = send(
-            device,
-            RemoteRequest("sync", server = creds.server, username = creds.username, password = creds.password, sync = payload),
-        )
-        status.error?.let { throw IOException(it) }
-        return status
     }
 
     suspend fun command(device: RemoteDevice, type: String): Result<RemoteStatus> = withContext(Dispatchers.IO) {
@@ -216,20 +196,6 @@ class RemoteControl(
                     scope.launch { catalog.load(creds, force = true) }
                 }
             }
-            "sync" -> {
-                val payload = cmd.sync ?: return 400 to currentStatus(error = "nothing to copy")
-                runBlocking {
-                    cmd.server?.let { server ->
-                        val creds = Credentials(server, cmd.username.orEmpty(), cmd.password.orEmpty())
-                        if (settings.currentCredentials() != creds) {
-                            settings.saveCredentials(creds)
-                            scope.launch { catalog.load(creds, force = true) }
-                        }
-                    }
-                    applySyncPayload(settings, library, payload)
-                }
-                emit(RemoteCommand.Synced)
-            }
             "play" -> {
                 if (runBlocking { settings.currentCredentials() } == null) return 409 to currentStatus(error = NOT_SIGNED_IN)
                 if (cmd.channels.isEmpty()) return 400 to currentStatus(error = "no channels")
@@ -260,7 +226,6 @@ class RemoteControl(
             title = now?.title,
             index = now?.index ?: -1,
             count = now?.count ?: 0,
-            favorites = library.library.value.favorites.size,
             error = error,
         )
     }

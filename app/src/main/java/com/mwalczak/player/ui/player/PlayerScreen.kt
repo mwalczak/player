@@ -211,7 +211,7 @@ private fun PlayerContent(
                 RemoteCommand.Previous -> controller.previous()
                 RemoteCommand.Last -> controller.last()
                 RemoteCommand.Stop -> onExit()
-                is RemoteCommand.Play, RemoteCommand.Synced -> Unit // handled by navigation
+                is RemoteCommand.Play -> Unit // handled by navigation
             }
         }
     }

@@ -1,7 +1,6 @@
 package com.mwalczak.player.data.sync
 
 import android.os.Build
-import com.mwalczak.player.cast.SyncPayload
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable

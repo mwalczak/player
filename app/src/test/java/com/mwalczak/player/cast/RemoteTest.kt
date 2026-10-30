@@ -59,18 +59,9 @@ class RemoteTest {
     }
 
     @Test
-    fun `copy-to-tv payload keeps favorites order, lists and settings`() {
-        val library = com.mwalczak.player.data.Library(
-            favorites = listOf(Channel(2, "TVN24"), Channel(1, "TVP1")),
-            lists = listOf(com.mwalczak.player.data.UserList("l1", "Sport", listOf(Channel(3, "Polsat Sport")))),
-            pinnedCategories = listOf("5"),
-        )
-        val request = RemoteRequest(
-            "sync", server = "http://s", username = "u", password = "p",
-            sync = SyncPayload(library, "HLS", tryAlternates = false, nextInList = true, stallTimeoutSec = 8, epgEnabled = true, epgUrl = "https://g/x.xml.gz"),
-        )
+    fun `a login request carries the account`() {
+        val request = RemoteRequest("login", server = "http://s", username = "u", password = "p")
         val decoded = remoteJson.decodeFromString(RemoteRequest.serializer(), remoteJson.encodeToString(RemoteRequest.serializer(), request))
-        assertEquals(request, decoded)
-        assertEquals(listOf(2, 1), decoded.sync!!.library.favorites.map { it.streamId })
+        assertEquals(Triple("http://s", "u", "p"), Triple(decoded.server, decoded.username, decoded.password))
     }
 }
