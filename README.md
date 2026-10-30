@@ -20,6 +20,12 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   - The player always goes landscape. On a TV remote, the focused item is clearly highlighted.
 - **Favorites first**: the app opens on your favorites when you have some. To add a channel, **long-press it** anywhere (or tap ☆). While watching, use the ☆ in the overlay or the red/bookmark button on a TV remote.
 - **Live TV** shows the provider's own categories (countries, sports…) in the server's order, plus "All channels" and "Recently watched". **Pin** 📌 categories (e.g. Poland) to keep them at the top.
+- **TV guide (EPG)**:
+  - Every channel row shows what's on now, with a progress bar.
+  - The player shows Now/Next, and 🕒 (or the remote's Guide button) lists the rest of today.
+  - The **TV guide** tab is a grid with channels down the side, time across the top and a line at "now". Pick Favorites or a category, and tap a programme to watch.
+  - Guide data comes from an external XMLTV guide, by default the daily [epgshare01](https://epgshare01.online) Polish guide (about 9 MB). It's matched to your channels by name, and mybunny's own guide fills the gaps.
+  - The source URL can be changed in Settings → TV guide.
 - **Search** across the whole catalog. Matching ignores case and accents and accepts words in any order ("one bbc" finds "UK: BBC One HD").
 - **Favorites** can be reordered. The order is the zapping and failover order.
 - **My lists**: create, rename, delete and reorder your own lists ("Sports", "News"…) and add channels from search.
@@ -71,12 +77,13 @@ app/src/main/java/com/mwalczak/player/
 │   ├── ServerUrls.kt       # URL normalisation, M3U link parsing, stream URLs
 │   ├── CatalogRepository.kt# in-memory + on-disk channel catalog, search
 │   ├── ChannelMatcher.kt   # finds alternate feeds of the same channel
+│   ├── epg/                # XMLTV download, streaming parse, name matching, cache
 │   ├── LibraryStore.kt     # favorites, lists, recently watched
 │   └── SettingsStore.kt    # credentials and playback settings (DataStore)
 ├── cast/                   # phone -> TV remote (mDNS discovery + tiny HTTP receiver)
 ├── update/                 # self-update from GitHub Releases
 └── ui/
-    ├── login/  home/  lists/  common/
+    ├── login/  home/  lists/  common/  guide/
     └── player/
         ├── PlayerController.kt  # ExoPlayer + zapping + failover logic
         └── PlayerScreen.kt      # fullscreen player UI

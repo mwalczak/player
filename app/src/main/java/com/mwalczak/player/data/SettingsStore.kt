@@ -10,6 +10,9 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import com.mwalczak.player.data.epg.DEFAULT_EPG_URL
+
+data class EpgSettings(val enabled: Boolean = true, val url: String = DEFAULT_EPG_URL)
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
@@ -23,6 +26,20 @@ class SettingsStore(private val context: Context) {
         val tryAlternates = booleanPreferencesKey("try_alternates")
         val nextInList = booleanPreferencesKey("next_in_list")
         val stallTimeout = intPreferencesKey("stall_timeout_sec")
+        val epgUrl = stringPreferencesKey("epg_url")
+        val epgEnabled = booleanPreferencesKey("epg_enabled")
+    }
+
+    /** External XMLTV guide; on by default with the Polish epgshare01 guide. */
+    val epg: Flow<EpgSettings> = context.dataStore.data.map { p ->
+        EpgSettings(enabled = p[Keys.epgEnabled] ?: true, url = p[Keys.epgUrl] ?: DEFAULT_EPG_URL)
+    }
+
+    suspend fun updateEpg(settings: EpgSettings) {
+        context.dataStore.edit {
+            it[Keys.epgEnabled] = settings.enabled
+            it[Keys.epgUrl] = settings.url.trim()
+        }
     }
 
     val credentials: Flow<Credentials?> = context.dataStore.data.map { it.credentials() }

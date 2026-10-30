@@ -22,6 +22,7 @@ import com.mwalczak.player.data.Channel
 import com.mwalczak.player.data.ChannelMatcher
 import com.mwalczak.player.data.Credentials
 import com.mwalczak.player.data.EpgEntry
+import com.mwalczak.player.data.epg.fromNow
 import com.mwalczak.player.data.PlaybackSettings
 import com.mwalczak.player.data.ServerUrls
 import com.mwalczak.player.data.StreamFormat
@@ -247,10 +248,15 @@ class PlayerController(
         epgJob?.cancel()
         epgJob = scope.launch {
             val now = System.currentTimeMillis() / 1000
-            val entries = runCatching { container.xtream.shortEpg(creds, channel.streamId, limit = 4) }
-                .getOrDefault(emptyList())
-                .filter { it.endEpochSec > now }
-                .take(2)
+            // The guide (external XMLTV + provider fill) first; ask the provider directly otherwise.
+            val guide = container.epg.programmesFor(channel.streamId).fromNow(now)
+            val entries = if (guide.isNotEmpty()) {
+                guide.map { EpgEntry(it.title, it.desc, it.start, it.stop) }
+            } else {
+                runCatching { container.xtream.shortEpg(creds, channel.streamId, limit = 12) }
+                    .getOrDefault(emptyList())
+                    .filter { it.endEpochSec > now }
+            }
             if (_state.value.playing.streamId == channel.streamId) _state.update { it.copy(epg = entries) }
         }
     }

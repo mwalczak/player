@@ -4,6 +4,18 @@ import android.app.Application
 import android.content.Context
 import com.mwalczak.player.cast.RemoteControl
 import com.mwalczak.player.data.CatalogRepository
+import com.mwalczak.player.data.CatalogState
+import com.mwalczak.player.data.epg.EpgRepository
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import com.mwalczak.player.data.Channel
 import com.mwalczak.player.data.LibraryStore
 import com.mwalczak.player.data.SettingsStore
@@ -43,6 +55,37 @@ class AppContainer(context: Context) {
     val library = LibraryStore(context, appScope)
     val updater = Updater(context, httpClient, appScope, BuildConfig.VERSION_CODE)
     val remote = RemoteControl(context, httpClient, settings, catalog, appScope)
+    val epg = EpgRepository(context, httpClient, xtream)
+
+    /** Current time in epoch seconds, ticking every 30 s, for "now" lines and progress bars. */
+    val clock: StateFlow<Long> = flow {
+        while (true) {
+            emit(System.currentTimeMillis() / 1000)
+            delay(30_000)
+        }
+    }.stateIn(appScope, SharingStarted.WhileSubscribed(5_000), System.currentTimeMillis() / 1000)
+
+    init {
+        // Keep the guide in step with the channel list and the guide settings.
+        appScope.launch {
+            combine(catalog.state, settings.epg, settings.credentials) { c, e, creds ->
+                val channels = (c as? CatalogState.Ready)?.takeIf { !it.refreshing }?.catalog?.channels
+                Triple(channels, e, creds)
+            }
+                .distinctUntilChanged()
+                .collectLatest { (channels, epgSettings, creds) ->
+                    if (channels == null || creds == null) return@collectLatest
+                    epg.refresh(creds, channels, epgSettings.url, epgSettings.enabled)
+                }
+        }
+    }
+
+    suspend fun refreshEpg() {
+        val creds = settings.currentCredentials() ?: return
+        val channels = catalog.catalog?.channels ?: return
+        val e = settings.epg.first()
+        epg.refresh(creds, channels, e.url, e.enabled, force = true)
+    }
 
     /** Set right before navigating to the player screen. */
     var pendingQueue: PlaybackQueue? = null

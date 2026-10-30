@@ -19,7 +19,7 @@ object ChannelMatcher {
 
     fun baseName(name: String): String {
         // NFKD turns styled characters such as "ᴴᴰ" or "ＨＤ" into plain "HD" and splits accents off.
-        var s = Normalizer.normalize(name, Normalizer.Form.NFKD).replace(diacritics, "").lowercase()
+        var s = fold(name)
         s = countryPrefix.replace(s, "")
         s = bracketed.replace(s, " ")
         s = s.replace(nonAlnum, " ")
@@ -37,6 +37,14 @@ object ChannelMatcher {
     }
 
     /** Case- and accent-insensitive "contains" used by search. */
-    fun searchKey(text: String): String =
-        Normalizer.normalize(text, Normalizer.Form.NFKD).replace(diacritics, "").lowercase()
+    fun searchKey(text: String): String = fold(text)
+
+    /** Lowercase, accents removed, and letters NFKD can't split transliterated ("Fabuła" -> "fabula"). */
+    private fun fold(text: String): String {
+        val decomposed = Normalizer.normalize(text, Normalizer.Form.NFKD).replace(diacritics, "").lowercase()
+        if (decomposed.none { it in transliterations }) return decomposed
+        return buildString { decomposed.forEach { c -> append(transliterations[c] ?: c) } }
+    }
+
+    private val transliterations = mapOf('ł' to "l", 'ø' to "o", 'đ' to "d", 'ß' to "ss", 'æ' to "ae", 'œ' to "oe", 'ı' to "i")
 }

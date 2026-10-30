@@ -79,4 +79,6 @@ dependencies {
     implementation(libs.coil.compose)
 
     testImplementation(libs.junit)
+    // XmlPullParser implementation for unit tests (Android provides its own at runtime).
+    testImplementation(libs.kxml2)
 }

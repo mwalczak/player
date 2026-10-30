@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CalendarViewWeek
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.PushPin
@@ -49,6 +50,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -87,6 +89,7 @@ import com.mwalczak.player.ui.common.ChannelGrid
 import com.mwalczak.player.ui.common.EmptyState
 import com.mwalczak.player.ui.common.focusHighlight
 import com.mwalczak.player.ui.lists.FavoritesTab
+import com.mwalczak.player.ui.guide.GuideTab
 import com.mwalczak.player.ui.lists.ListsTab
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -99,6 +102,7 @@ const val RECENT = "__recent__"
 private enum class Tab(val label: String, val icon: ImageVector) {
     Favorites("Favorites", Icons.Default.Star),
     Live("Live TV", Icons.Default.LiveTv),
+    Guide("TV guide", Icons.Default.CalendarViewWeek),
     Search("Search", Icons.Default.Search),
     Lists("My lists", Icons.AutoMirrored.Filled.List),
     Settings("Settings", Icons.Default.Settings),
@@ -125,6 +129,7 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (tab) {
                     Tab.Live -> LiveTab(container, actions, catalogState)
+                    Tab.Guide -> GuideTab(container, actions)
                     Tab.Search -> SearchTab(container, actions, catalogState)
                     Tab.Favorites -> FavoritesTab(container, actions)
                     Tab.Lists -> ListsTab(container, actions)
@@ -148,6 +153,14 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
                 ) {
                     Text(tab.label, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                     CastButton(container)
+                    // Settings lives up here on a phone so the bottom bar keeps five items.
+                    IconButton(onClick = { tab = Tab.Settings }) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = if (tab == Tab.Settings) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                        )
+                    }
                 }
                 content(
                     Modifier
@@ -156,7 +169,7 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
                         .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
                 )
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                    Tab.entries.forEach {
+                    Tab.entries.filter { it != Tab.Settings }.forEach {
                         NavigationBarItem(
                             selected = tab == it,
                             onClick = { tab = it },

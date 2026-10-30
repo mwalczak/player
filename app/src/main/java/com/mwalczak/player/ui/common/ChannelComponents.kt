@@ -59,6 +59,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.SubcomposeAsyncImage
 import com.mwalczak.player.AppContainer
 import com.mwalczak.player.data.Channel
+import com.mwalczak.player.data.epg.Programme
+import com.mwalczak.player.data.epg.onAir
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.LinearProgressIndicator
 
 @Composable
 fun ChannelLogo(url: String?, modifier: Modifier = Modifier) {
@@ -131,13 +135,23 @@ fun ChannelRow(
         ChannelLogo(channel.icon, Modifier.size(48.dp))
         Column(Modifier.weight(1f)) {
             Text(channel.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (subtitle != null) {
+            val onAir = nowOnAir(container, channel)
+            val line = listOfNotNull(subtitle, onAir?.title).joinToString("  ·  ")
+            if (line.isNotEmpty()) {
                 Text(
-                    subtitle,
+                    line,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (onAir != null) {
+                val now by container.clock.collectAsStateWithLifecycle()
+                LinearProgressIndicator(
+                    progress = { onAir.progress(now) },
+                    modifier = Modifier.padding(top = 4.dp, end = 8.dp).fillMaxWidth().height(2.dp),
+                    drawStopIndicator = {},
                 )
             }
         }
@@ -165,6 +179,17 @@ fun ChannelRow(
 }
 
 val CardShape = RoundedCornerShape(12.dp)
+
+/** The programme currently on [channel], from the guide. */
+@Composable
+fun nowOnAir(container: AppContainer, channel: Channel): Programme? {
+    val epg by container.epg.state.collectAsStateWithLifecycle()
+    val now by container.clock.collectAsStateWithLifecycle()
+    return epg.programmes[channel.streamId]?.onAir(now)
+}
+
+fun Programme.progress(nowSec: Long): Float =
+    ((nowSec - start).toFloat() / (stop - start).coerceAtLeast(1)).coerceIn(0f, 1f)
 
 /** Bold outline + tint when focused, so D-pad navigation on a TV is easy to follow. */
 @Composable

@@ -30,6 +30,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mwalczak.player.AppContainer
 import com.mwalczak.player.data.AccountInfo
 import com.mwalczak.player.data.CatalogState
+import com.mwalczak.player.data.EpgSettings
+import com.mwalczak.player.data.epg.DEFAULT_EPG_URL
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.style.TextOverflow
 import com.mwalczak.player.data.PlaybackSettings
 import com.mwalczak.player.data.StreamFormat
 import com.mwalczak.player.ui.Actions
@@ -58,6 +64,30 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
 
     val update by container.updater.state.collectAsStateWithLifecycle()
     val catalogState by container.catalog.state.collectAsStateWithLifecycle()
+    val epgState by container.epg.state.collectAsStateWithLifecycle()
+    val epgSettings by container.settings.epg.collectAsStateWithLifecycle(EpgSettings())
+    var editingEpgUrl by remember { mutableStateOf(false) }
+
+    if (editingEpgUrl) {
+        var url by remember { mutableStateOf(epgSettings.url) }
+        AlertDialog(
+            onDismissRequest = { editingEpgUrl = false },
+            title = { Text("Guide source") },
+            text = {
+                Column {
+                    OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("XMLTV URL (.xml or .xml.gz)") })
+                    TextButton(onClick = { url = DEFAULT_EPG_URL }) { Text("Use default (Poland)") }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    editingEpgUrl = false
+                    scope.launch { container.settings.updateEpg(epgSettings.copy(url = url)) }
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { editingEpgUrl = false }) { Text("Cancel") } },
+        )
+    }
     val activity = LocalActivity.current
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).widthIn(max = 760.dp)) {
@@ -111,6 +141,39 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             modifier = Modifier.clickable {
                 update { s -> s.copy(stallTimeoutSec = timeouts[(timeouts.indexOf(s.stallTimeoutSec) + 1) % timeouts.size]) }
             },
+        )
+
+        SectionHeader(startPadding = 16.dp, text = "TV guide (EPG)")
+        ListItem(
+            headlineContent = { Text("Use external guide") },
+            supportingContent = {
+                Text(
+                    when {
+                        epgState.loading -> "Updating the guide…"
+                        epgState.error != null -> "Error: ${epgState.error}"
+                        epgState.updatedAtMillis > 0 -> {
+                            val total = (catalogState as? CatalogState.Ready)?.catalog?.channels?.size ?: 0
+                            val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(epgState.updatedAtMillis))
+                            "Guide for ${epgState.programmes.size} of $total channels · updated $time"
+                        }
+                        else -> "Fills in programmes your provider doesn't send"
+                    },
+                )
+            },
+            trailingContent = { Switch(checked = epgSettings.enabled, onCheckedChange = null) },
+            modifier = Modifier.clickable {
+                scope.launch { container.settings.updateEpg(epgSettings.copy(enabled = !epgSettings.enabled)) }
+            },
+        )
+        ListItem(
+            headlineContent = { Text("Guide source (XMLTV)") },
+            supportingContent = { Text(epgSettings.url, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            modifier = Modifier.clickable { editingEpgUrl = true },
+        )
+        ListItem(
+            headlineContent = { Text("Refresh guide now") },
+            leadingContent = { Icon(Icons.Default.Refresh, null) },
+            modifier = Modifier.clickable { scope.launch { container.refreshEpg() } },
         )
 
         SectionHeader(startPadding = 16.dp, text = "App")

@@ -37,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Star
@@ -136,6 +137,7 @@ private fun PlayerContent(
 
     var overlay by remember { mutableStateOf(true) }
     var panel by remember { mutableStateOf(false) }
+    var schedule by remember { mutableStateOf(false) }
     var resizeIndex by remember { mutableIntStateOf(0) }
     var interaction by remember { mutableIntStateOf(0) }
     val focus = remember { FocusRequester() }
@@ -190,15 +192,19 @@ private fun PlayerContent(
 
     // Auto-hide the overlay after a few seconds without interaction.
     LaunchedEffect(overlay, interaction, state.status) {
-        if (overlay && !panel && state.status == PlaybackStatus.Playing) {
+        if (overlay && !panel && !schedule && state.status == PlaybackStatus.Playing) {
             delay(5_000)
             overlay = false
         }
     }
     LaunchedEffect(Unit) { focus.requestFocus() }
 
-    BackHandler(enabled = panel || overlay) {
-        if (panel) panel = false else overlay = false
+    BackHandler(enabled = panel || schedule || overlay) {
+        when {
+            panel -> panel = false
+            schedule -> schedule = false
+            else -> overlay = false
+        }
     }
 
     fun poke() {
@@ -215,7 +221,12 @@ private fun PlayerContent(
             .focusRequester(focus)
             .focusable()
             .onKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown || panel) return@onKeyEvent false
+                if (event.type != KeyEventType.KeyDown || panel || schedule) return@onKeyEvent false
+                // Guide button on TV remotes: today's schedule for this channel.
+                if (event.key.nativeKeyCode == android.view.KeyEvent.KEYCODE_GUIDE) {
+                    schedule = true
+                    return@onKeyEvent true
+                }
                 // Red / bookmark button on TV remotes: favorite the channel being watched.
                 if (event.key.nativeKeyCode == android.view.KeyEvent.KEYCODE_PROG_RED || event.key == Key.Bookmark) {
                     container.library.toggleFavorite(state.playing)
@@ -297,6 +308,7 @@ private fun PlayerContent(
                 onFavorite = { container.library.toggleFavorite(state.playing); poke() },
                 onResize = { resizeIndex = (resizeIndex + 1) % resizeModes.size; poke() },
                 onList = { panel = true },
+                onSchedule = { schedule = true },
                 castButton = {
                     // Hand the channel being watched over to the TV and stop playing here.
                     CastButton(container, tint = Color.White) { device ->
@@ -327,10 +339,19 @@ private fun PlayerContent(
                 poke()
             }
         }
+
+        AnimatedVisibility(
+            visible = schedule,
+            enter = slideInHorizontally { it },
+            exit = slideOutHorizontally { it },
+            modifier = Modifier.align(Alignment.CenterEnd),
+        ) {
+            SchedulePanel(state)
+        }
     }
 
     // Give key focus back to the player when the panel closes, so the remote keeps zapping.
-    LaunchedEffect(panel) { if (!panel) runCatching { focus.requestFocus() } }
+    LaunchedEffect(panel, schedule) { if (!panel && !schedule) runCatching { focus.requestFocus() } }
 }
 
 @Composable
@@ -342,6 +363,7 @@ private fun Overlay(
     onFavorite: () -> Unit,
     onResize: () -> Unit,
     onList: () -> Unit,
+    onSchedule: () -> Unit,
     castButton: @Composable () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
@@ -384,6 +406,7 @@ private fun Overlay(
             }
             IconButton(onClick = onResize) { Icon(Icons.Default.AspectRatio, "Aspect: $resizeLabel", tint = Color.White) }
             castButton()
+            IconButton(onClick = onSchedule) { Icon(Icons.Default.Schedule, "Today's schedule", tint = Color.White) }
             IconButton(onClick = onList) { Icon(Icons.AutoMirrored.Filled.List, "Channel list", tint = Color.White) }
         }
 
@@ -439,6 +462,69 @@ private fun NowPlaying(now: EpgEntry, next: EpgEntry?) {
             )
         }
     }
+}
+
+@Composable
+private fun SchedulePanel(state: PlayerUiState) {
+    val time = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
+    val now = System.currentTimeMillis() / 1000
+    val first = remember { FocusRequester() }
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(360.dp)
+            .background(Color(0xE6101418))
+            .safeDrawingPadding(),
+    ) {
+        item {
+            Text(
+                state.playing.name,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(16.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (state.epg.isEmpty()) {
+            item {
+                Text(
+                    "No guide data for this channel.",
+                    color = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+        }
+        itemsIndexed(state.epg) { index, entry ->
+            val onAir = entry.startEpochSec <= now && now < entry.endEpochSec
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (index == 0) Modifier.focusRequester(first) else Modifier)
+                    .background(if (onAir) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                    .focusable()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+            ) {
+                Text(
+                    "${time.format(Date(entry.startEpochSec * 1000))} – ${time.format(Date(entry.endEpochSec * 1000))}",
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                Text(entry.title, color = Color.White, fontWeight = if (onAir) FontWeight.SemiBold else FontWeight.Normal)
+                if (onAir && entry.description.isNotBlank()) {
+                    Text(
+                        entry.description,
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+    // Give the remote something to scroll from.
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
 }
 
 @Composable
