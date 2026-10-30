@@ -20,10 +20,32 @@ NS="${PICOSHARE_NAMESPACE:-files}"
 DEPLOY="${PICOSHARE_DEPLOYMENT:-picoshare}"
 LOCAL_PORT=14001
 
-# Non-interactive ssh sessions may not see the kubeconfig the login shell uses.
+# Non-interactive ssh sessions skip ~/.bashrc, so pick up the KUBECONFIG an interactive shell would use,
+# then fall back to sudo (k3s keeps /etc/rancher/k3s/k3s.yaml root-only by default).
+if [[ -z "${KUBECONFIG:-}" ]]; then
+  kc="$(grep -hoE 'KUBECONFIG=[^ ;]+' ~/.bashrc ~/.profile ~/.bash_profile ~/.zshrc 2>/dev/null | tail -1 | cut -d= -f2- | tr -d "\"'")"
+  kc="${kc/#\~/$HOME}"
+  kc="${kc//\$HOME/$HOME}"
+  [[ -n "$kc" && -r "$kc" ]] && export KUBECONFIG="$kc"
+fi
 if [[ -z "${KUBECONFIG:-}" && ! -f "$HOME/.kube/config" && -r /etc/rancher/k3s/k3s.yaml ]]; then
   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 fi
+
+KUBECTL=(command kubectl)
+if ! command kubectl get namespace "$NS" >/dev/null 2>&1; then
+  if sudo -n k3s kubectl get namespace "$NS" >/dev/null 2>&1; then
+    KUBECTL=(sudo -n k3s kubectl)
+  elif sudo -n kubectl get namespace "$NS" >/dev/null 2>&1; then
+    KUBECTL=(sudo -n kubectl)
+  else
+    echo "kubectl cannot reach the cluster as $(whoami) (tried KUBECONFIG, ~/.kube/config and passwordless sudo)." >&2
+    echo "Fix: mkdir -p ~/.kube && sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config && sudo chown \$USER ~/.kube/config" >&2
+    exit 1
+  fi
+fi
+echo "Using: ${KUBECTL[*]}"
+kubectl() { "${KUBECTL[@]}" "$@"; }
 
 [[ -f "$APK" ]] || { echo "APK not found: $APK" >&2; exit 1; }
 

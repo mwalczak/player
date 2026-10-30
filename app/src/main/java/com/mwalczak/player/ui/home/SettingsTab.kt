@@ -1,6 +1,11 @@
 package com.mwalczak.player.ui.home
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.ui.unit.dp
+import com.mwalczak.player.BuildConfig
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
@@ -50,8 +55,11 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
         scope.launch { container.settings.updatePlayback(transform) }
     }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        SectionHeader("Account")
+    val update by container.updater.state.collectAsStateWithLifecycle()
+    val activity = LocalActivity.current
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).widthIn(max = 760.dp)) {
+        SectionHeader(startPadding = 16.dp, text = "Account")
         ListItem(
             headlineContent = { Text(creds?.username ?: "—") },
             supportingContent = { Text(creds?.server ?: "") },
@@ -69,7 +77,7 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             ListItem(headlineContent = { Text(it, color = MaterialTheme.colorScheme.error) })
         }
 
-        SectionHeader("Stream format")
+        SectionHeader(startPadding = 16.dp, text = "Stream format")
         StreamFormat.entries.forEach { format ->
             ListItem(
                 headlineContent = { Text(format.label) },
@@ -81,7 +89,7 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             )
         }
 
-        SectionHeader("When a channel is off")
+        SectionHeader(startPadding = 16.dp, text = "When a channel is off")
         ListItem(
             headlineContent = { Text("Try other feeds of the same channel") },
             supportingContent = { Text("e.g. “ESPN HD” is down → play “ESPN FHD” or a backup feed") },
@@ -103,7 +111,26 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             },
         )
 
-        SectionHeader("Data")
+        SectionHeader(startPadding = 16.dp, text = "App")
+        ListItem(
+            headlineContent = { Text("Version ${BuildConfig.VERSION_NAME}") },
+            supportingContent = {
+                Text(
+                    when {
+                        update.currentBuild <= 1 -> "Local build – updates only for builds from GitHub"
+                        update.available -> "Build ${update.latestBuild} is available – tap to update"
+                        update.latestBuild > 0 -> "Up to date"
+                        else -> "Tap to check for updates"
+                    },
+                )
+            },
+            leadingContent = { Icon(Icons.Default.SystemUpdate, null) },
+            modifier = Modifier.clickable {
+                if (update.available) activity?.let(container.updater::install) else container.updater.check(force = true)
+            },
+        )
+
+        SectionHeader(startPadding = 16.dp, text = "Data")
         ListItem(
             headlineContent = { Text("Reload channel list") },
             leadingContent = { Icon(Icons.Default.Refresh, null) },

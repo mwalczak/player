@@ -2,6 +2,8 @@ package com.mwalczak.player.ui.login
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -85,31 +87,20 @@ fun LoginScreen(container: AppContainer, onLoggedIn: () -> Unit) {
         }
     }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .systemBarsPadding()
-            .imePadding(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            Modifier
-                .widthIn(max = 480.dp)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
+    val header: @Composable () -> Unit = {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Icon(Icons.Default.LiveTv, contentDescription = null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
             Text("Bunny Player", style = MaterialTheme.typography.headlineMedium)
             Text(
-                "Sign in with the Xtream Codes details from your provider (e.g. the mybunny.tv account page or welcome email).",
+                "Sign in with the Xtream Codes details from your provider (e.g. the mybunny.tv account page or welcome email). " +
+                    "You only need to do this once – the app remembers you.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(4.dp))
-
+        }
+    }
+    val form: @Composable () -> Unit = {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             if (showM3u) {
                 OutlinedTextField(
                     value = m3uLink,
@@ -171,6 +162,38 @@ fun LoginScreen(container: AppContainer, onLoggedIn: () -> Unit) {
             }
             TextButton(onClick = { showM3u = !showM3u }) {
                 Text(if (showM3u) "Hide M3U link" else "I have an M3U link instead")
+            }
+        }
+    }
+
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .systemBarsPadding()
+            .imePadding(),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (maxWidth >= 600.dp) {
+            // Landscape phone / tablet / TV: intro on the left, form on the right.
+            Row(
+                Modifier.widthIn(max = 1000.dp).fillMaxWidth().padding(horizontal = 32.dp),
+                horizontalArrangement = Arrangement.spacedBy(48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f)) { header() }
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 16.dp)) { form() }
+            }
+        } else {
+            Column(
+                Modifier
+                    .widthIn(max = 480.dp)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                header()
+                form()
             }
         }
     }

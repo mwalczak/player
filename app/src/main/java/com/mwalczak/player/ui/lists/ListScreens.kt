@@ -49,11 +49,28 @@ import com.mwalczak.player.data.CatalogState
 import com.mwalczak.player.data.Channel
 import com.mwalczak.player.ui.Actions
 import com.mwalczak.player.ui.common.ChannelLogo
-import com.mwalczak.player.ui.common.ChannelRow
+import com.mwalczak.player.ui.common.ChannelGrid
 import com.mwalczak.player.ui.common.EmptyState
 import com.mwalczak.player.ui.home.SearchContent
 import com.mwalczak.player.ui.home.WithCatalog
 import com.mwalczak.player.ui.home.categoryName
+import com.mwalczak.player.ui.home.ScreenHeader
+import com.mwalczak.player.ui.common.CardShape
+import com.mwalczak.player.ui.common.GRID_MIN_CELL
+import com.mwalczak.player.ui.common.focusHighlight
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material3.Button
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 
 @Composable
 fun FavoritesTab(container: AppContainer, actions: Actions) {
@@ -113,8 +130,12 @@ private fun OrderedChannelList(
                 }
             }
         }
+        if (!reordering) {
+            ChannelGrid(container, channels, onPlay = onPlay, subtitle = { index, _ -> "${index + 1}." })
+            return@Column
+        }
         LazyColumn(Modifier.fillMaxSize()) {
-            if (reordering) {
+            run {
                 itemsIndexed(channels, key = { _, c -> c.streamId }) { index, channel ->
                     ListItem(
                         headlineContent = { Text(channel.name, maxLines = 1) },
@@ -132,10 +153,6 @@ private fun OrderedChannelList(
                         },
                     )
                 }
-            } else {
-                itemsIndexed(channels, key = { _, c -> c.streamId }) { index, channel ->
-                    ChannelRow(container, channel, onClick = { onPlay(index) }, subtitle = "${index + 1}.")
-                }
             }
         }
     }
@@ -150,20 +167,40 @@ fun ListsTab(container: AppContainer, actions: Actions) {
         if (library.lists.isEmpty()) {
             EmptyState("Create lists like “Sports” or “News” and fill them with your channels.")
         } else {
-            LazyColumn(Modifier.fillMaxSize()) {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 260.dp),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 items(library.lists, key = { it.id }) { list ->
-                    ListItem(
-                        headlineContent = { Text(list.name) },
-                        supportingContent = { Text("${list.channels.size} channels") },
-                        leadingContent = { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null) },
-                        trailingContent = {
-                            IconButton(
-                                onClick = { actions.play(list.name, list.channels, 0) },
-                                enabled = list.channels.isNotEmpty(),
-                            ) { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, "Play ${list.name}") }
-                        },
-                        modifier = Modifier.clickable { actions.openList(list.id) },
-                    )
+                    val interaction = remember { MutableInteractionSource() }
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(CardShape)
+                            .background(MaterialTheme.colorScheme.surfaceContainer)
+                            .focusHighlight(interaction)
+                            .clickable(interactionSource = interaction, indication = LocalIndication.current) {
+                                actions.openList(list.id)
+                            }
+                            .padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(list.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                "${list.channels.size} channels",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        IconButton(
+                            onClick = { actions.play(list.name, list.channels, 0) },
+                            enabled = list.channels.isNotEmpty(),
+                        ) { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, "Play ${list.name}") }
+                    }
                 }
             }
         }
@@ -198,29 +235,22 @@ fun ListDetailScreen(container: AppContainer, actions: Actions, listId: String) 
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(list?.name ?: "List") },
-                navigationIcon = {
-                    IconButton(onClick = { actions.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                },
-                actions = {
-                    IconButton(onClick = { renaming = true }) { Icon(Icons.Default.Edit, "Rename") }
-                    IconButton(onClick = { deleting = true }) { Icon(Icons.Default.Delete, "Delete list") }
-                },
-            )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { actions.openPicker(listId) },
-                icon = { Icon(Icons.Default.Add, null) },
-                text = { Text("Add channels") },
-            )
-        },
-    ) { padding ->
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .windowInsetsPadding(WindowInsets.safeDrawing),
+    ) {
+        ScreenHeader(list?.name ?: "List", onBack = { actions.back() }) {
+            Button(onClick = { actions.openPicker(listId) }) {
+                Icon(Icons.Default.Add, null)
+                Text(" Add channels")
+            }
+            IconButton(onClick = { renaming = true }) { Icon(Icons.Default.Edit, "Rename") }
+            IconButton(onClick = { deleting = true }) { Icon(Icons.Default.Delete, "Delete list") }
+        }
         if (list == null) {
-            EmptyState("This list no longer exists.", Modifier.padding(padding))
+            EmptyState("This list no longer exists.")
         } else {
             OrderedChannelList(
                 container = container,
@@ -231,7 +261,6 @@ fun ListDetailScreen(container: AppContainer, actions: Actions, listId: String) 
                 onPlay = { index -> actions.play(list.name, list.channels, index) },
                 onMove = { from, to -> container.library.moveInList(listId, from, to) },
                 onRemove = { container.library.toggleInList(listId, it) },
-                modifier = Modifier.padding(padding),
             )
         }
     }
@@ -268,31 +297,53 @@ fun ChannelPickerScreen(container: AppContainer, actions: Actions, listId: Strin
     val list = library.lists.firstOrNull { it.id == listId }
     val inList = list?.channels.orEmpty().map { it.streamId }.toSet()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Add to ${list?.name.orEmpty()} (${inList.size})") },
-                navigationIcon = {
-                    IconButton(onClick = { actions.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                },
-                actions = {
-                    TextButton(onClick = { actions.back() }) { Text("Done") }
-                },
-            )
-        },
-    ) { padding ->
-        Box(Modifier.padding(padding)) {
-            WithCatalog(container, catalogState) { catalog ->
-                SearchContent(catalog) { results ->
-                    LazyColumn(Modifier.fillMaxSize()) {
-                        items(results, key = { it.streamId }) { channel ->
-                            val checked = channel.streamId in inList
-                            ListItem(
-                                headlineContent = { Text(channel.name, maxLines = 1) },
-                                supportingContent = catalog.categoryName(channel)?.let { { Text(it, maxLines = 1) } },
-                                leadingContent = { Checkbox(checked = checked, onCheckedChange = null) },
-                                modifier = Modifier.clickable { container.library.toggleInList(listId, channel) },
-                            )
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .windowInsetsPadding(WindowInsets.safeDrawing),
+    ) {
+        ScreenHeader("Add to ${list?.name.orEmpty()} (${inList.size})", onBack = { actions.back() }) {
+            Button(onClick = { actions.back() }) { Text("Done") }
+        }
+        WithCatalog(container, catalogState) { catalog ->
+            SearchContent(catalog) { results ->
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = GRID_MIN_CELL),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(results, key = { it.streamId }) { channel ->
+                        val interaction = remember { MutableInteractionSource() }
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(CardShape)
+                                .background(MaterialTheme.colorScheme.surfaceContainer)
+                                .focusHighlight(interaction)
+                                .clickable(interactionSource = interaction, indication = LocalIndication.current) {
+                                    container.library.toggleInList(listId, channel)
+                                }
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Checkbox(checked = channel.streamId in inList, onCheckedChange = null)
+                            ChannelLogo(channel.icon, Modifier.size(40.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(channel.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                catalog.categoryName(channel)?.let {
+                                    Text(
+                                        it,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
                     }
                 }

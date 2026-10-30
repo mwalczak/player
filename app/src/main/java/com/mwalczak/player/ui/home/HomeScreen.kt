@@ -1,43 +1,59 @@
 package com.mwalczak.player.ui.home
 
+import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,17 +64,23 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mwalczak.player.AppContainer
 import com.mwalczak.player.data.Catalog
 import com.mwalczak.player.data.CatalogState
 import com.mwalczak.player.data.Channel
+import com.mwalczak.player.data.ChannelMatcher
 import com.mwalczak.player.ui.Actions
-import com.mwalczak.player.ui.common.ChannelRow
+import com.mwalczak.player.ui.common.CardShape
+import com.mwalczak.player.ui.common.ChannelGrid
 import com.mwalczak.player.ui.common.EmptyState
+import com.mwalczak.player.ui.common.focusHighlight
 import com.mwalczak.player.ui.lists.FavoritesTab
 import com.mwalczak.player.ui.lists.ListsTab
 import kotlinx.coroutines.Dispatchers
@@ -77,7 +99,10 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     Settings("Settings", Icons.Default.Settings),
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Insets for content next to the navigation rail (the rail itself handles the start edge). */
+private val ContentInsets: WindowInsets
+    @Composable get() = WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Vertical)
+
 @Composable
 fun HomeScreen(container: AppContainer, actions: Actions) {
     // Open on Favorites when there are some, otherwise on the full Live TV list.
@@ -86,35 +111,69 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
     }
     val catalogState by container.catalog.state.collectAsStateWithLifecycle()
 
-    Scaffold(
-        topBar = {
-            Column {
-                TopAppBar(title = { Text(tab.label) })
-                if (catalogState is CatalogState.Loading || (catalogState as? CatalogState.Ready)?.refreshing == true) {
-                    LinearProgressIndicator(Modifier.fillMaxWidth())
+    // The app is landscape-only (phone, tablet, TV), so navigation lives in a rail on the left
+    // and all vertical space goes to the channels.
+    Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        NavigationRail(
+            windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical),
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ) {
+            Spacer(Modifier.weight(1f))
+            Tab.entries.forEach {
+                NavigationRailItem(
+                    selected = tab == it,
+                    onClick = { tab = it },
+                    icon = { Icon(it.icon, contentDescription = null) },
+                    label = { Text(it.label, maxLines = 1) },
+                )
+            }
+            Spacer(Modifier.weight(1f))
+        }
+        Column(
+            Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .windowInsetsPadding(ContentInsets),
+        ) {
+            if (catalogState is CatalogState.Loading || (catalogState as? CatalogState.Ready)?.refreshing == true) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
+            UpdateBanner(container)
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                when (tab) {
+                    Tab.Live -> LiveTab(container, actions, catalogState)
+                    Tab.Search -> SearchTab(container, actions, catalogState)
+                    Tab.Favorites -> FavoritesTab(container, actions)
+                    Tab.Lists -> ListsTab(container, actions)
+                    Tab.Settings -> SettingsTab(container, actions)
                 }
             }
-        },
-        bottomBar = {
-            NavigationBar {
-                Tab.entries.forEach {
-                    NavigationBarItem(
-                        selected = tab == it,
-                        onClick = { tab = it },
-                        icon = { Icon(it.icon, contentDescription = null) },
-                        label = { Text(it.label, maxLines = 1) },
-                    )
-                }
+        }
+    }
+}
+
+@Composable
+private fun UpdateBanner(container: AppContainer) {
+    val state by container.updater.state.collectAsStateWithLifecycle()
+    if (!state.available && state.message == null) return
+    val activity = LocalActivity.current
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        shape = CardShape,
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(Icons.Default.SystemUpdate, contentDescription = null)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(state.message ?: "A new version is available (build ${state.latestBuild}, you have ${state.currentBuild})")
+                if (state.busy) LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
             }
-        },
-    ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize()) {
-            when (tab) {
-                Tab.Live -> LiveTab(container, actions, catalogState)
-                Tab.Search -> SearchTab(container, actions, catalogState)
-                Tab.Favorites -> FavoritesTab(container, actions)
-                Tab.Lists -> ListsTab(container, actions)
-                Tab.Settings -> SettingsTab(container, actions)
+            if (state.available && !state.busy) {
+                Button(onClick = { activity?.let(container.updater::install) }) { Text("Update") }
             }
         }
     }
@@ -156,38 +215,42 @@ private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogSta
                 }
             },
         ) {
-            LazyColumn(Modifier.fillMaxSize()) {
-                if (library.recent.isNotEmpty()) {
-                    item {
-                        CategoryItem("Recently watched", library.recent.size, Icons.Default.History) { actions.openCategory(RECENT) }
-                    }
-                }
-                item {
-                    CategoryItem("All channels", catalog.channels.size, Icons.Default.Tv) { actions.openCategory(ALL_CHANNELS) }
-                    HorizontalDivider()
-                }
-                val pinned = library.pinnedCategories.mapNotNull { id -> catalog.categories.firstOrNull { it.id == id } }
+            val pinned = library.pinnedCategories.mapNotNull { id -> catalog.categories.firstOrNull { it.id == id } }
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 240.dp),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 if (pinned.isNotEmpty()) {
-                    item { SectionHeader("Pinned") }
+                    header { SectionHeader("Pinned") }
                     items(pinned, key = { "pinned-${it.id}" }) { category ->
-                        CategoryItem(
+                        CategoryCard(
                             category.name,
                             catalog.channelsIn(category.id).size,
-                            null,
                             pinned = true,
                             onPin = { container.library.togglePinnedCategory(category.id) },
                         ) { actions.openCategory(category.id) }
                     }
-                    item {
-                        HorizontalDivider()
-                        SectionHeader("All categories")
+                }
+                header { SectionHeader("Categories") }
+                if (library.recent.isNotEmpty()) {
+                    item(key = RECENT) {
+                        CategoryCard("Recently watched", library.recent.size, icon = Icons.Default.History) {
+                            actions.openCategory(RECENT)
+                        }
+                    }
+                }
+                item(key = ALL_CHANNELS) {
+                    CategoryCard("All channels", catalog.channels.size, icon = Icons.Default.Tv) {
+                        actions.openCategory(ALL_CHANNELS)
                     }
                 }
                 items(catalog.categories, key = { it.id }) { category ->
-                    CategoryItem(
+                    CategoryCard(
                         category.name,
                         catalog.channelsIn(category.id).size,
-                        null,
                         pinned = category.id in library.pinnedCategories,
                         onPin = { container.library.togglePinnedCategory(category.id) },
                     ) { actions.openCategory(category.id) }
@@ -197,50 +260,64 @@ private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogSta
     }
 }
 
+private fun androidx.compose.foundation.lazy.grid.LazyGridScope.header(content: @Composable () -> Unit) =
+    item(span = { GridItemSpan(maxLineSpan) }) { content() }
+
 @Composable
-private fun CategoryItem(
+private fun CategoryCard(
     name: String,
     count: Int,
-    icon: ImageVector?,
+    icon: ImageVector? = null,
     pinned: Boolean = false,
     onPin: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
-    ListItem(
-        headlineContent = { Text(name) },
-        leadingContent = icon?.let { { Icon(it, contentDescription = null) } },
-        trailingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("$count", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (onPin != null) {
-                    IconButton(onClick = onPin) {
-                        Icon(
-                            if (pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                            contentDescription = if (pinned) "Unpin $name" else "Pin $name to the top",
-                            tint = if (pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clip(CardShape)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .focusHighlight(interaction)
+            .clickable(interactionSource = interaction, indication = LocalIndication.current, onClick = onClick)
+            .padding(start = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (icon != null) Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Text(
+            name,
+            modifier = Modifier.weight(1f).padding(vertical = 8.dp),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            fontWeight = if (pinned) FontWeight.SemiBold else FontWeight.Normal,
+        )
+        Text("$count", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        if (onPin != null) {
+            IconButton(onClick = onPin) {
+                Icon(
+                    if (pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                    contentDescription = if (pinned) "Unpin $name" else "Pin $name to the top",
+                    tint = if (pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-        },
-        modifier = Modifier.clickable(onClick = onClick),
-    )
+        } else {
+            Spacer(Modifier.size(16.dp))
+        }
+    }
 }
 
 @Composable
 private fun SearchTab(container: AppContainer, actions: Actions, state: CatalogState) {
     WithCatalog(container, state) { catalog ->
         SearchContent(catalog) { results ->
-            LazyColumn(Modifier.fillMaxSize()) {
-                items(results, key = { it.streamId }) { channel ->
-                    ChannelRow(
-                        container,
-                        channel,
-                        subtitle = catalog.categoryName(channel),
-                        onClick = { actions.play("Search results", results, results.indexOf(channel)) },
-                    )
-                }
-            }
+            ChannelGrid(
+                container,
+                results,
+                onPlay = { index -> actions.play("Search results", results, index) },
+                subtitle = { _, channel -> catalog.categoryName(channel) },
+            )
         }
     }
 }
@@ -267,10 +344,13 @@ fun SearchContent(catalog: Catalog, results: @Composable (List<Channel>) -> Unit
             },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            modifier = Modifier
+                .padding(start = 12.dp, end = 12.dp, top = 12.dp)
+                .widthIn(max = 640.dp)
+                .fillMaxWidth(),
         )
         when {
-            query.isBlank() -> EmptyState("Type a channel name, e.g. “sport” or “bbc one”.")
+            query.isBlank() -> EmptyState("Type a channel name, e.g. “sport” or “polsat”.")
             matches.isEmpty() -> EmptyState("No channels match “$query”.")
             else -> results(matches)
         }
@@ -280,7 +360,6 @@ fun SearchContent(catalog: Catalog, results: @Composable (List<Channel>) -> Unit
 fun Catalog.categoryName(channel: Channel): String? =
     categories.firstOrNull { it.id == channel.categoryId }?.name
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryScreen(container: AppContainer, actions: Actions, categoryId: String) {
     val state by container.catalog.state.collectAsStateWithLifecycle()
@@ -303,51 +382,65 @@ fun CategoryScreen(container: AppContainer, actions: Actions, categoryId: String
     val shown = remember(channels, filter) {
         if (filter.isBlank()) channels
         else {
-            val key = com.mwalczak.player.data.ChannelMatcher.searchKey(filter)
-            channels.filter { com.mwalczak.player.data.ChannelMatcher.searchKey(it.name).contains(key) }
+            val key = ChannelMatcher.searchKey(filter)
+            channels.filter { ChannelMatcher.searchKey(it.name).contains(key) }
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(title) },
-                navigationIcon = {
-                    IconButton(onClick = { actions.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                },
-            )
-        },
-    ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .windowInsetsPadding(WindowInsets.safeDrawing),
+    ) {
+        // One compact header row (back, title, filter) to leave the height for channels in landscape.
+        ScreenHeader(title, onBack = { actions.back() }) {
             OutlinedTextField(
                 value = filter,
                 onValueChange = { filter = it },
                 placeholder = { Text("Filter ${channels.size} channels") },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
             )
-            if (shown.isEmpty()) {
-                EmptyState(if (catalog == null && categoryId != RECENT) "Loading channels…" else "No channels here.")
-            } else {
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items(shown, key = { it.streamId }) { channel ->
-                        ChannelRow(
-                            container,
-                            channel,
-                            subtitle = if (channel.num > 0) "#${channel.num}" else null,
-                            onClick = { actions.play(title, shown, shown.indexOf(channel)) },
-                        )
-                    }
-                }
-            }
+        }
+        if (shown.isEmpty()) {
+            EmptyState(if (catalog == null && categoryId != RECENT) "Loading channels…" else "No channels here.")
+        } else {
+            ChannelGrid(
+                container,
+                shown,
+                onPlay = { index -> actions.play(title, shown, index) },
+                subtitle = { _, channel -> if (channel.num > 0) "#${channel.num}" else null },
+            )
         }
     }
 }
 
+/** Back button + title on the left, optional [actions] (e.g. a filter field) on the right. */
 @Composable
-internal fun SectionHeader(text: String) {
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 20.dp, bottom = 4.dp)) {
+fun ScreenHeader(title: String, onBack: () -> Unit, actions: @Composable () -> Unit = {}) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        Spacer(Modifier.weight(0.01f))
+        actions()
+    }
+}
+
+@Composable
+internal fun SectionHeader(text: String, startPadding: androidx.compose.ui.unit.Dp = 4.dp) {
+    Row(Modifier.fillMaxWidth().padding(start = startPadding, top = 12.dp, bottom = 4.dp).height(24.dp)) {
         Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
     }
 }

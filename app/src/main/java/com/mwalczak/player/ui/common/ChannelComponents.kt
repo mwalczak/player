@@ -2,6 +2,16 @@ package com.mwalczak.player.ui.common
 
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.InteractionSource
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
@@ -96,10 +106,16 @@ fun ChannelRow(
     var addToList by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
+    val interaction = remember { MutableInteractionSource() }
     Row(
         modifier
             .fillMaxWidth()
+            .clip(CardShape)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .focusHighlight(interaction)
             .combinedClickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
                 onClick = onClick,
                 // Long-press (or long-press OK on a remote) is the quickest way to (un)favorite.
                 onLongClick = {
@@ -108,9 +124,9 @@ fun ChannelRow(
                     Toast.makeText(context, "${channel.name}: $message", Toast.LENGTH_SHORT).show()
                 },
             )
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(start = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         ChannelLogo(channel.icon, Modifier.size(48.dp))
         Column(Modifier.weight(1f)) {
@@ -147,6 +163,43 @@ fun ChannelRow(
 
     if (addToList) AddToListDialog(container, channel, onDismiss = { addToList = false })
 }
+
+val CardShape = RoundedCornerShape(12.dp)
+
+/** Bold outline + tint when focused, so D-pad navigation on a TV is easy to follow. */
+@Composable
+fun Modifier.focusHighlight(interaction: InteractionSource, shape: Shape = CardShape): Modifier {
+    val focused by interaction.collectIsFocusedAsState()
+    if (!focused) return this
+    val color = MaterialTheme.colorScheme.primary
+    return this
+        .border(3.dp, color, shape)
+        .background(color.copy(alpha = 0.18f), shape)
+}
+
+/** Channels laid out in as many columns as fit: 2 on a phone in landscape, 3-4 on a tablet, 2-3 on a TV. */
+@Composable
+fun ChannelGrid(
+    container: AppContainer,
+    channels: List<Channel>,
+    onPlay: (index: Int) -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: (index: Int, channel: Channel) -> String? = { _, _ -> null },
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = GRID_MIN_CELL),
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        itemsIndexed(channels, key = { _, c -> c.streamId }) { index, channel ->
+            ChannelRow(container, channel, onClick = { onPlay(index) }, subtitle = subtitle(index, channel))
+        }
+    }
+}
+
+val GRID_MIN_CELL = 300.dp
 
 @Composable
 fun AddToListDialog(container: AppContainer, channel: Channel, onDismiss: () -> Unit) {

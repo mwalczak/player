@@ -1,11 +1,20 @@
 # Bunny Player
 
 An Android IPTV player for **Xtream Codes** providers such as [mybunny.tv](https://mybunny.tv).
-It runs on phones, tablets and Android TV / Fire TV boxes.
+It is laid out for landscape use on phones, tablets and Android TV (remote / D-pad friendly).
+
+## Install
+
+Download the latest APK on the device and open it:
+
+**https://github.com/mwalczak/player/releases/latest/download/bunny-player.apk**
+
+After that the app **updates itself**. Every push to `main` is built by GitHub Actions and published as a release `build-N`. The app checks for a newer build on start (and when you come back to it), shows an *Update* banner, and installs it with one tap. The first time, Android asks you to allow installs from Bunny Player.
 
 ## Features
 
-- **Sign in** with server URL, username and password, or paste an M3U link (`…/get.php?username=…&password=…`) and the fields fill in for you.
+- **Sign in once** with server URL, username and password, or paste an M3U link (`…/get.php?username=…&password=…`) and the fields fill in for you. The login is remembered, so the app opens straight into your channels.
+- **Landscape layout** for phone, tablet and TV: navigation rail on the left, channels in as many columns as fit, and a clear highlight around the focused item when using a TV remote.
 - **Favorites first**: the app opens on your favorites when you have some. To add a channel, **long-press it** anywhere (or tap ☆). While watching, use the ☆ in the overlay or the red/bookmark button on a TV remote.
 - **Live TV** shows the provider's own categories (countries, sports…) in the server's order, plus "All channels" and "Recently watched". **Pin** 📌 categories (e.g. Poland) to keep them at the top.
 - **Search** across the whole catalog. Matching ignores case and accents and accepts words in any order ("one bbc" finds "UK: BBC One HD").
@@ -34,25 +43,24 @@ Requirements: JDK 17+ and the Android SDK (platform 35).
 echo "sdk.dir=/path/to/Android/sdk" > local.properties   # or open the project in Android Studio
 ./gradlew testDebugUnitTest      # unit tests
 ./gradlew assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
-./gradlew assembleRelease        # minified; signed with the debug key for sideloading
+./gradlew assembleRelease        # minified, signed with app/debug.keystore
 ```
 
 Install on a device or Fire TV with `adb install app/build/outputs/apk/debug/app-debug.apk`.
 
-## CI: build and publish to PicoShare
+## CI
 
-`.github/workflows/build.yml` runs the unit tests and builds the release APK on every push to `main`, then publishes it to PicoShare on the VPS:
+`.github/workflows/build.yml` runs the unit tests and builds the APK on every push. On `main` it publishes a GitHub Release `build-<run number>` with `bunny-player.apk`. The APK's `versionCode` is the run number, which is how the in-app updater spots newer builds. Local builds are version 1 and never auto-update. All builds are signed with the committed `app/debug.keystore`, so any build installs over any other.
+
+### Optional mirror on PicoShare
+
+A second, non-blocking job also puts the APK on PicoShare on the VPS:
 
 1. The APK is copied over SSH (`VPS_HOST`, `VPS_SSH_KEY`; optional `VPS_USER` (default `debian`) and `VPS_PORT`).
 2. [`scripts/picoshare-upload.sh`](scripts/picoshare-upload.sh) runs on the VPS. It reads PicoShare's shared secret from the pod (namespace `files`) and uploads the APK through a `kubectl port-forward`.
 3. The script then swaps the upload into the existing **`android.all.apk`** entry. It moves the new file chunks under the old entry ID in PicoShare's SQLite DB, so **the download link never changes** and always serves the latest build.
 
-Optional secrets for a stable signing key, so updates install over the previous version without uninstalling:
-
-```bash
-keytool -genkeypair -keystore release.keystore -alias bunny -keyalg RSA -keysize 2048 -validity 10000
-base64 -w0 release.keystore   # → secret SIGNING_KEYSTORE_BASE64; the password → secret SIGNING_PASSWORD
-```
+The script needs a working `kubectl` for the SSH user. It looks for `KUBECONFIG` in your shell rc files, then `~/.kube/config`, then tries passwordless `sudo k3s kubectl`.
 
 ## Project layout
 
@@ -67,6 +75,7 @@ app/src/main/java/com/mwalczak/player/
 │   ├── ChannelMatcher.kt   # finds alternate feeds of the same channel
 │   ├── LibraryStore.kt     # favorites, lists, recently watched
 │   └── SettingsStore.kt    # credentials and playback settings (DataStore)
+├── update/                 # self-update from GitHub Releases
 └── ui/
     ├── login/  home/  lists/  common/
     └── player/

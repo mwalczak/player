@@ -7,6 +7,7 @@ import com.mwalczak.player.data.Channel
 import com.mwalczak.player.data.LibraryStore
 import com.mwalczak.player.data.SettingsStore
 import com.mwalczak.player.data.XtreamClient
+import com.mwalczak.player.update.Updater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +40,7 @@ class AppContainer(context: Context) {
     val xtream = XtreamClient(httpClient)
     val catalog = CatalogRepository(context, xtream)
     val library = LibraryStore(context, appScope)
+    val updater = Updater(context, httpClient, appScope, BuildConfig.VERSION_CODE)
 
     /** Set right before navigating to the player screen. */
     var pendingQueue: PlaybackQueue? = null

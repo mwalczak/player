@@ -13,21 +13,21 @@ android {
         applicationId = "com.mwalczak.player"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // GitHub Actions builds are numbered (release build-12 has versionCode 12), so the app can
+        // tell when a newer release exists. Local builds are version 1 and never auto-update.
+        val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = buildNumber
+        versionName = "1.$buildNumber"
     }
 
-    // CI signs with a stable key from secrets so new builds install over old ones;
-    // local builds without it fall back to the debug key.
-    val releaseKeystore = System.getenv("SIGNING_KEYSTORE_PATH")?.let(::file)?.takeIf { it.exists() }
     signingConfigs {
-        if (releaseKeystore != null) {
-            create("release") {
-                storeFile = releaseKeystore
-                storePassword = System.getenv("SIGNING_PASSWORD")
-                keyAlias = System.getenv("SIGNING_KEY_ALIAS") ?: "bunny"
-                keyPassword = System.getenv("SIGNING_PASSWORD")
-            }
+        // A fixed key checked into the repo, so APKs built on any machine (or by GitHub Actions)
+        // install over each other and the in-app updater works.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
         }
     }
 
@@ -36,7 +36,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -49,6 +49,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
