@@ -23,6 +23,7 @@ import secrets
 import sqlite3
 import threading
 import time
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -41,10 +42,16 @@ _misses = {}
 _misses_lock = threading.Lock()
 
 
+@contextmanager
 def connect():
+    """A connection that commits on success and is always closed."""
     db = sqlite3.connect(DB_PATH, timeout=10)
     db.row_factory = sqlite3.Row
-    return db
+    try:
+        with db:
+            yield db
+    finally:
+        db.close()
 
 
 def init_db():
@@ -203,23 +210,27 @@ class Handler(BaseHTTPRequestHandler):
         base = body.get("baseRevision")
         data = json.dumps(body["data"], separators=(",", ":"))
         now = int(time.time() * 1000)
+        # Commit before answering, so a read right after a save always sees it.
         with _write_lock, connect() as db:
             row = db.execute("SELECT * FROM profiles WHERE owner = ?", (owner,)).fetchone()
             if row is None:
-                code = new_code(db)
+                code, revision = new_code(db), 1
                 db.execute(
-                    "INSERT INTO profiles (owner, code, revision, data, updated_at) VALUES (?, ?, 1, ?, ?)",
-                    (owner, code, data, now),
+                    "INSERT INTO profiles (owner, code, revision, data, updated_at) VALUES (?, ?, ?, ?, ?)",
+                    (owner, code, revision, data, now),
                 )
-                return self.send_json(200, {"code": code, "revision": 1, "updatedAt": now})
-            if base != row["revision"]:
-                return self.send_json(409, profile_json(row))
-            revision = row["revision"] + 1
-            db.execute(
-                "UPDATE profiles SET revision = ?, data = ?, updated_at = ? WHERE owner = ?",
-                (revision, data, now, owner),
-            )
-            self.send_json(200, {"code": row["code"], "revision": revision, "updatedAt": now})
+            elif base != row["revision"]:
+                conflict = profile_json(row)
+                code = None
+            else:
+                code, revision = row["code"], row["revision"] + 1
+                db.execute(
+                    "UPDATE profiles SET revision = ?, data = ?, updated_at = ? WHERE owner = ?",
+                    (revision, data, now, owner),
+                )
+        if code is None:
+            return self.send_json(409, conflict)
+        self.send_json(200, {"code": code, "revision": revision, "updatedAt": now})
 
 
 def main():
