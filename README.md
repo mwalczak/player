@@ -38,7 +38,7 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
 - **Cast to TV over Wi-Fi** (phone as remote): open Bunny Player on the TV, then on the phone tap 📺 (top of the side rail, or in the player) and pick the TV.
   - Any channel you tap on the phone now plays on the TV, and a bar shows what's on with ⏮ ⏭ ■ controls.
   - Casting from the player hands over the channel you're watching.
-  - If the TV app isn't signed in, the phone signs it in with your account.
+  - If the TV app isn't signed in, the phone sets it up like itself: login, favorites, lists, pinned categories and settings. A signed-in TV with no favorites gets yours too.
   - Devices find each other with mDNS (`_bunnyplayer._tcp`) and talk over plain HTTP on the local network. The TV uses its own player, so `.ts` streams and failover work exactly as they do on the TV. This avoids Chromecast, whose receiver can't play raw `.ts` and needs CORS headers that IPTV servers don't send.
 - **Copy to TV**: Settings → *Copy favorites & settings to TV* sends your favorites (in order), lists, pinned categories, playback and guide settings and login to the TV app over Wi-Fi, so you don't set everything up twice. Open Bunny Player on the TV first.
 - **Export / import**: Settings → *Export favorites & settings* creates a file and opens the share sheet (WhatsApp, e-mail, Drive…).

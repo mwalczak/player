@@ -127,9 +127,12 @@ class RemoteControl(
             val request = RemoteRequest("play", queue.title, queue.channels, queue.startIndex)
             var status = send(device, request)
             if (status.error == NOT_SIGNED_IN) {
-                val creds = settings.currentCredentials() ?: throw IOException("Sign in on this device first")
-                send(device, RemoteRequest("login", server = creds.server, username = creds.username, password = creds.password))
+                // A fresh TV: set it up like this device (login, favorites, lists, settings).
+                sendSync(device)
                 status = send(device, request)
+            } else if (status.favorites == 0 && library.library.value.favorites.isNotEmpty()) {
+                // Signed in but no favorites yet (e.g. signed in by an older version): copy them over.
+                runCatching { sendSync(device) }
             }
             status.error?.let { throw IOException(it) }
             status
@@ -141,16 +144,18 @@ class RemoteControl(
      * this device's, and signs it in with our account.
      */
     suspend fun syncTo(device: RemoteDevice): Result<RemoteStatus> = withContext(Dispatchers.IO) {
-        runCatching {
-            val creds = settings.currentCredentials() ?: throw IOException("Sign in on this device first")
-            val payload = currentSyncPayload(settings, library)
-            val status = send(
-                device,
-                RemoteRequest("sync", server = creds.server, username = creds.username, password = creds.password, sync = payload),
-            )
-            status.error?.let { throw IOException(it) }
-            status
-        }
+        runCatching { sendSync(device) }
+    }
+
+    private suspend fun sendSync(device: RemoteDevice): RemoteStatus {
+        val creds = settings.currentCredentials() ?: throw IOException("Sign in on this device first")
+        val payload = currentSyncPayload(settings, library)
+        val status = send(
+            device,
+            RemoteRequest("sync", server = creds.server, username = creds.username, password = creds.password, sync = payload),
+        )
+        status.error?.let { throw IOException(it) }
+        return status
     }
 
     suspend fun command(device: RemoteDevice, type: String): Result<RemoteStatus> = withContext(Dispatchers.IO) {
@@ -255,6 +260,7 @@ class RemoteControl(
             title = now?.title,
             index = now?.index ?: -1,
             count = now?.count ?: 0,
+            favorites = library.library.value.favorites.size,
             error = error,
         )
     }

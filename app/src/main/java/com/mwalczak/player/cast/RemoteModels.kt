@@ -46,6 +46,8 @@ data class RemoteStatus(
     val title: String? = null,
     val index: Int = -1,
     val count: Int = 0,
+    /** Number of favorites on the receiver; -1 when it runs an older version that doesn't say. */
+    val favorites: Int = -1,
     val error: String? = null,
 )
 
