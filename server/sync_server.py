@@ -6,6 +6,9 @@ and shares them with friends by a short code.
 - A person's own devices find their profile with an owner key the app derives from the mybunny
   login (PBKDF2 on the device). The server never sees the login, and stores only a hash of the key.
 - Anyone with a profile's share code can read it (follow it or copy it), never change it.
+- The last 100 saved versions are kept, each with when, from which address and which device it
+  was saved, so an owner can go back to any of them. Saves from the same device and address
+  within a couple of minutes (e.g. reordering favorites) become one version.
 
 Standard library only, so it runs on a plain python image. Data lives in one SQLite file.
 
@@ -13,6 +16,8 @@ Standard library only, so it runs on a plain python image. Data lives in one SQL
   GET  /v1/me[?since=N]               Authorization: Bearer <owner key>  -> profile | 304 | 404
   PUT  /v1/me  {"baseRevision", "data"}  creates or updates; 409 with the current profile if
                                          baseRevision is stale
+  GET  /v1/me/versions                  -> {"versions": [newest first, without data]}
+  GET  /v1/me/versions/<revision>       -> that version, with data
   GET  /v1/profiles/<code>[?since=N]  -> profile | 304 | 404
 """
 import hashlib
@@ -36,6 +41,9 @@ CODE_LEN = 8
 KEY_RE = re.compile(r"^[0-9a-f]{64}$")
 # Wrong share codes allowed per address and hour, so codes can't be guessed.
 MISSES_PER_HOUR = 60
+MAX_VERSIONS = 100
+# Saves closer together than this, from the same device and address, update one version.
+MERGE_VERSIONS_MS = 2 * 60 * 1000
 
 _write_lock = threading.Lock()
 _misses = {}
@@ -67,6 +75,61 @@ def init_db():
                 updated_at INTEGER NOT NULL
             )"""
         )
+        db.execute(
+            """CREATE TABLE IF NOT EXISTS versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                data TEXT NOT NULL,
+                ip TEXT NOT NULL,
+                device TEXT NOT NULL,
+                saved_at INTEGER NOT NULL
+            )"""
+        )
+        db.execute("CREATE INDEX IF NOT EXISTS versions_owner ON versions (owner, id)")
+        # Profiles saved before there was a history start it with what they have now.
+        db.execute(
+            """INSERT INTO versions (owner, revision, data, ip, device, saved_at)
+               SELECT owner, revision, data, '', '', updated_at FROM profiles
+               WHERE owner NOT IN (SELECT DISTINCT owner FROM versions)"""
+        )
+
+
+def add_version(db, owner, revision, data, ip, device, now):
+    last = db.execute(
+        "SELECT id, ip, device, saved_at FROM versions WHERE owner = ? ORDER BY id DESC LIMIT 1", (owner,)
+    ).fetchone()
+    if last and last["ip"] == ip and last["device"] == device and now - last["saved_at"] < MERGE_VERSIONS_MS:
+        db.execute(
+            "UPDATE versions SET revision = ?, data = ?, saved_at = ? WHERE id = ?", (revision, data, now, last["id"])
+        )
+    else:
+        db.execute(
+            "INSERT INTO versions (owner, revision, data, ip, device, saved_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (owner, revision, data, ip, device, now),
+        )
+    db.execute(
+        """DELETE FROM versions WHERE owner = ? AND id NOT IN
+           (SELECT id FROM versions WHERE owner = ? ORDER BY id DESC LIMIT ?)""",
+        (owner, owner, MAX_VERSIONS),
+    )
+
+
+def version_json(row, with_data):
+    data = json.loads(row["data"])
+    library = data.get("library") if isinstance(data.get("library"), dict) else {}
+    version = {
+        "revision": row["revision"],
+        "savedAt": row["saved_at"],
+        "ip": row["ip"],
+        "device": row["device"],
+        "favorites": len(library.get("favorites") or []),
+        "lists": len(library.get("lists") or []),
+        "pinned": len(library.get("pinnedCategories") or []),
+    }
+    if with_data:
+        version["data"] = data
+    return version
 
 
 def new_code(db):
@@ -139,8 +202,15 @@ class Handler(BaseHTTPRequestHandler):
         return hashlib.sha256(key.encode()).hexdigest()
 
     def address(self):
-        forwarded = self.headers.get("X-Forwarded-For", "")
-        return forwarded.split(",")[0].strip() or self.headers.get("X-Real-IP") or self.client_address[0]
+        """The client's address: Traefik passes it on (externalTrafficPolicy: Local), like ip.walczaki.com."""
+        real = (self.headers.get("X-Real-Ip") or "").strip()
+        forwarded = (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+        return (real or forwarded or self.client_address[0]).removeprefix("::ffff:")[:64]
+
+    def device(self):
+        """The device name the app sends (e.g. "Sony BRAVIA 4K"), cleaned up."""
+        name = re.sub(r"[^\w .,()+-]", "", self.headers.get("X-Device") or "")
+        return name.strip()[:80]
 
     def since(self, query):
         try:
@@ -176,6 +246,21 @@ class Handler(BaseHTTPRequestHandler):
             with connect() as db:
                 row = db.execute("SELECT * FROM profiles WHERE owner = ?", (owner,)).fetchone()
             return self.answer(row, self.since(url.query))
+        match = re.fullmatch(r"/v1/me/versions(?:/(\d+))?", url.path)
+        if match:
+            owner = self.owner()
+            if owner is None:
+                return
+            with connect() as db:
+                if match.group(1) is None:
+                    rows = db.execute("SELECT * FROM versions WHERE owner = ? ORDER BY id DESC", (owner,)).fetchall()
+                    return self.send_json(200, {"versions": [version_json(r, False) for r in rows]})
+                row = db.execute(
+                    "SELECT * FROM versions WHERE owner = ? AND revision = ?", (owner, int(match.group(1)))
+                ).fetchone()
+            if row is None:
+                return self.error(404, "no such version")
+            return self.send_json(200, version_json(row, True))
         match = re.fullmatch(r"/v1/profiles/([^/]+)", url.path)
         if match:
             address = self.address()
@@ -210,6 +295,7 @@ class Handler(BaseHTTPRequestHandler):
         base = body.get("baseRevision")
         data = json.dumps(body["data"], separators=(",", ":"))
         now = int(time.time() * 1000)
+        ip, device = self.address(), self.device()
         # Commit before answering, so a read right after a save always sees it.
         with _write_lock, connect() as db:
             row = db.execute("SELECT * FROM profiles WHERE owner = ?", (owner,)).fetchone()
@@ -219,6 +305,7 @@ class Handler(BaseHTTPRequestHandler):
                     "INSERT INTO profiles (owner, code, revision, data, updated_at) VALUES (?, ?, ?, ?, ?)",
                     (owner, code, revision, data, now),
                 )
+                add_version(db, owner, revision, data, ip, device, now)
             elif base != row["revision"]:
                 conflict = profile_json(row)
                 code = None
@@ -228,6 +315,7 @@ class Handler(BaseHTTPRequestHandler):
                     "UPDATE profiles SET revision = ?, data = ?, updated_at = ? WHERE owner = ?",
                     (revision, data, now, owner),
                 )
+                add_version(db, owner, revision, data, ip, device, now)
         if code is None:
             return self.send_json(409, conflict)
         self.send_json(200, {"code": code, "revision": revision, "updatedAt": now})

@@ -1,0 +1,88 @@
+# Bunny Player sync service (bunny.walczaki.com). Applied by .github/workflows/sync-server.yml,
+# which puts the image built from server/Dockerfile in place of IMAGE_PLACEHOLDER.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bunny
+---
+# The SQLite file with everyone's setups and their history.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sync-data
+  namespace: bunny
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 1Gi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sync-server
+  namespace: bunny
+spec:
+  replicas: 1
+  # The old pod keeps serving until the new one is ready (one node, so both can mount the volume).
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app: sync-server }
+  template:
+    metadata:
+      labels: { app: sync-server }
+    spec:
+      containers:
+        - name: sync-server
+          image: IMAGE_PLACEHOLDER
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: sync-data }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sync-server
+  namespace: bunny
+spec:
+  selector: { app: sync-server }
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sync-server
+  namespace: bunny
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [bunny.walczaki.com]
+      secretName: sync-server-tls
+  rules:
+    - host: bunny.walczaki.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sync-server
+                port:
+                  number: 80

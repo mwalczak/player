@@ -17,10 +17,12 @@ OWNER = "a" * 64
 OTHER = "b" * 64
 
 
-def call(method, path, key=None, body=None):
+def call(method, path, key=None, body=None, headers=None):
     request = urllib.request.Request(BASE + path, method=method, data=None if body is None else json.dumps(body).encode())
     if key:
         request.add_header("Authorization", "Bearer " + key)
+    for name, value in (headers or {}).items():
+        request.add_header(name, value)
     try:
         with urllib.request.urlopen(request) as response:
             text = response.read()
@@ -62,6 +64,37 @@ class SyncServerTest(unittest.TestCase):
         # …but can't write: their own key is their own profile.
         call("PUT", "/v1/me", OTHER, {"baseRevision": None, "data": {"favorites": [9]}})
         self.assertEqual(call("GET", "/v1/profiles/" + code)[1]["data"], {"favorites": [1, 2]})
+
+    def test_history_keeps_who_saved_what(self):
+        key = "d" * 64
+        tv = {"X-Device": "Sony BRAVIA 4K", "X-Real-Ip": "83.1.2.3"}
+        phone = {"X-Device": "motorola edge 50", "X-Forwarded-For": "5.6.7.8, 10.42.0.1"}
+        lib = lambda n: {"library": {"favorites": list(range(n)), "lists": [{"id": "a"}], "pinnedCategories": ["5"]}}
+        call("PUT", "/v1/me", key, {"baseRevision": None, "data": lib(1)}, tv)
+        call("PUT", "/v1/me", key, {"baseRevision": 1, "data": lib(2)}, tv)  # a moment later: same version
+        call("PUT", "/v1/me", key, {"baseRevision": 2, "data": lib(3)}, phone)
+
+        status, body = call("GET", "/v1/me/versions", key)
+        versions = body["versions"]
+        self.assertEqual([v["revision"] for v in versions], [3, 2])
+        self.assertEqual((versions[0]["device"], versions[0]["ip"], versions[0]["favorites"]), ("motorola edge 50", "5.6.7.8", 3))
+        self.assertEqual((versions[1]["device"], versions[1]["ip"], versions[1]["favorites"]), ("Sony BRAVIA 4K", "83.1.2.3", 2))
+        self.assertEqual((versions[1]["lists"], versions[1]["pinned"]), (1, 1))
+        self.assertNotIn("data", versions[0])
+
+        status, old = call("GET", "/v1/me/versions/2", key)
+        self.assertEqual((status, old["data"]), (200, lib(2)))
+        self.assertEqual(call("GET", "/v1/me/versions/1", key)[0], 404)  # merged into 2
+        self.assertEqual(call("GET", "/v1/me/versions/2", OTHER)[0], 404)  # only the owner sees it
+
+    def test_history_keeps_the_last_100(self):
+        key = "e" * 64
+        for revision in range(105):
+            device = {"X-Device": "device %d" % (revision % 2)}
+            call("PUT", "/v1/me", key, {"baseRevision": revision or None, "data": {"n": revision}}, device)
+        versions = call("GET", "/v1/me/versions", key)[1]["versions"]
+        self.assertEqual(len(versions), 100)
+        self.assertEqual((versions[0]["revision"], versions[-1]["revision"]), (105, 6))
 
     def test_rejects_bad_input(self):
         self.assertEqual(call("GET", "/v1/me", "short")[0], 401)
