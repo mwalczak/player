@@ -66,6 +66,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -129,24 +130,28 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
     }
     val catalogState by container.catalog.state.collectAsStateWithLifecycle()
 
-    val content: @Composable (Modifier) -> Unit = { modifier ->
-        Column(modifier) {
-            if (catalogState is CatalogState.Loading || (catalogState as? CatalogState.Ready)?.refreshing == true) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
-            }
-            UpdateBanner(container)
-            CrashReportBanner()
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                when (tab) {
-                    Tab.Live -> LiveTab(container, actions, catalogState)
-                    Tab.Guide -> GuideTab(container, actions)
-                    Tab.Search -> SearchTab(container, actions, catalogState)
-                    Tab.Favorites -> FavoritesTab(container, actions)
-                    Tab.Lists -> ListsTab(container, actions)
-                    Tab.Settings -> SettingsTab(container, actions)
+    // Movable, so turning the device (portrait bar <-> landscape rail) moves the open tab instead of
+    // rebuilding it: the guide's category, filters and scroll positions stay as they were.
+    val content = remember {
+        movableContentOf { modifier: Modifier ->
+            Column(modifier) {
+                if (catalogState is CatalogState.Loading || (catalogState as? CatalogState.Ready)?.refreshing == true) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
+                UpdateBanner(container)
+                CrashReportBanner()
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    when (tab) {
+                        Tab.Live -> LiveTab(container, actions, catalogState)
+                        Tab.Guide -> GuideTab(container, actions)
+                        Tab.Search -> SearchTab(container, actions, catalogState)
+                        Tab.Favorites -> FavoritesTab(container, actions)
+                        Tab.Lists -> ListsTab(container, actions)
+                        Tab.Settings -> SettingsTab(container, actions)
+                    }
+                }
+                RemoteBar(container, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp))
             }
-            RemoteBar(container, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp))
         }
     }
 
