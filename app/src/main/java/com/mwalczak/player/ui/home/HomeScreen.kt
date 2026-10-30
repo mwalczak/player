@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -92,7 +93,10 @@ import com.mwalczak.player.ui.common.CastButton
 import com.mwalczak.player.ui.common.RemoteBar
 import com.mwalczak.player.ui.common.ChannelGrid
 import com.mwalczak.player.ui.common.EmptyState
+import com.mwalczak.player.ui.common.RestoreFocus
 import com.mwalczak.player.ui.common.focusHighlight
+import com.mwalczak.player.ui.common.focusMemory
+import com.mwalczak.player.ui.common.rememberFocusMemory
 import com.mwalczak.player.ui.lists.FavoritesTab
 import com.mwalczak.player.ui.guide.GuideTab
 import com.mwalczak.player.ui.lists.ListsTab
@@ -305,9 +309,26 @@ private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogSta
             },
         ) {
             val pinned = library.pinnedCategories.mapNotNull { id -> catalog.categories.firstOrNull { it.id == id } }
+            // Back from a category, the remote lands on the card it was opened from.
+            val gridState = rememberLazyGridState()
+            val memory = rememberFocusMemory()
+            val keys = buildList {
+                if (pinned.isNotEmpty()) {
+                    add("")
+                    pinned.forEach { add("pinned-${it.id}") }
+                }
+                add("")
+                if (library.recent.isNotEmpty()) add(RECENT)
+                add(ALL_CHANNELS)
+                catalog.categories.forEach { add(it.id) }
+            }
+            val target = memory.target { it in keys }
+            RestoreFocus(memory, target?.let(keys::indexOf) ?: -1, ready = true, gridState)
+            fun Modifier.remembered(key: String) = focusMemory(memory, key, target)
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 240.dp),
                 modifier = Modifier.fillMaxSize(),
+                state = gridState,
                 contentPadding = PaddingValues(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -320,19 +341,20 @@ private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogSta
                             catalog.channelsIn(category.id).size,
                             pinned = true,
                             onPin = { container.library.togglePinnedCategory(category.id) },
+                            modifier = Modifier.remembered("pinned-${category.id}"),
                         ) { actions.openCategory(category.id) }
                     }
                 }
                 header { SectionHeader("Categories") }
                 if (library.recent.isNotEmpty()) {
                     item(key = RECENT) {
-                        CategoryCard("Recently watched", library.recent.size, icon = Icons.Default.History) {
+                        CategoryCard("Recently watched", library.recent.size, icon = Icons.Default.History, modifier = Modifier.remembered(RECENT)) {
                             actions.openCategory(RECENT)
                         }
                     }
                 }
                 item(key = ALL_CHANNELS) {
-                    CategoryCard("All channels", catalog.channels.size, icon = Icons.Default.Tv) {
+                    CategoryCard("All channels", catalog.channels.size, icon = Icons.Default.Tv, modifier = Modifier.remembered(ALL_CHANNELS)) {
                         actions.openCategory(ALL_CHANNELS)
                     }
                 }
@@ -342,6 +364,7 @@ private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogSta
                         catalog.channelsIn(category.id).size,
                         pinned = category.id in library.pinnedCategories,
                         onPin = { container.library.togglePinnedCategory(category.id) },
+                        modifier = Modifier.remembered(category.id),
                     ) { actions.openCategory(category.id) }
                 }
             }
@@ -359,11 +382,12 @@ private fun CategoryCard(
     icon: ImageVector? = null,
     pinned: Boolean = false,
     onPin: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .clip(CardShape)

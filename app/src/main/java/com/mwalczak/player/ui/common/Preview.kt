@@ -121,8 +121,13 @@ private fun PreviewContent(
     LaunchedEffect(playback) { controller.settings = playback.copy(nextInList = false) }
 
     // With an account that allows one stream, previewing would cut off someone else: ask once.
+    // Not right after full screen: the server may still count the stream that was just closed.
     var allowed by remember { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(Unit) {
+        if (System.currentTimeMillis() - container.playerStoppedAtMillis < 15_000) {
+            allowed = true
+            return@LaunchedEffect
+        }
         val usage = controller.connectionUsage()
         allowed = usage == null || usage.second <= 0 || usage.first < usage.second
     }

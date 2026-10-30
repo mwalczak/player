@@ -60,6 +60,9 @@ import com.mwalczak.player.ui.common.previewEnabled
 import androidx.compose.ui.focus.onFocusChanged
 import com.mwalczak.player.ui.common.EmptyState
 import com.mwalczak.player.ui.common.focusHighlight
+import com.mwalczak.player.ui.common.focusMemory
+import com.mwalczak.player.ui.common.rememberFocusMemory
+import com.mwalczak.player.ui.common.requestFocusSoon
 import com.mwalczak.player.ui.home.WithCatalog
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -216,30 +219,41 @@ private fun GuideGrid(
     var focusedRow by remember { mutableStateOf(-1) }
     val onPlay: (Int) -> Unit = { index -> onClick(index, focusedRow == index) }
     val now by container.clock.collectAsStateWithLifecycle()
-    // The window starts at the half hour before now and stays put while the screen is open.
-    val windowStart = remember { (System.currentTimeMillis() / 1000 - SLOT_SEC) / SLOT_SEC * SLOT_SEC }
+    // The window starts at the half hour before now and stays put while the screen is open
+    // (and when coming back from full screen, so the scroll position still matches).
+    val windowStart by rememberSaveable { mutableLongStateOf((System.currentTimeMillis() / 1000 - SLOT_SEC) / SLOT_SEC * SLOT_SEC) }
     val windowEnd = windowStart + WINDOW_SEC
     val timeFormat = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
     val density = LocalDensity.current
 
     // Remote navigation keeps a time cursor: ▲/▼ go to whatever is on at that time in the row
     // above/below (not to whichever cell happens to be nearest on screen), ◀/▶ move it along.
-    var cursorSec by remember { mutableLongStateOf(maxOf(System.currentTimeMillis() / 1000, windowStart)) }
+    var cursorSec by rememberSaveable { mutableLongStateOf(maxOf(System.currentTimeMillis() / 1000, windowStart)) }
     var movingVertically by remember { mutableStateOf(false) }
     val requesters = remember { HashMap<Int, FocusRequester>() }
     fun requester(i: Int) = requesters.getOrPut(i) { FocusRequester() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    // Back from full screen, the remote lands on the same time in the row that was playing.
+    val memory = rememberFocusMemory { container.lastPlayedStreamId?.toString() }
+    val restoreTo = memory.target { key -> channels.any { it.streamId.toString() == key } }
+    if (restoreTo != null) {
+        LaunchedEffect(restoreTo) {
+            val index = channels.indexOfFirst { it.streamId.toString() == restoreTo }
+            if (listState.layoutInfo.visibleItemsInfo.none { it.index == index }) listState.scrollToItem(index)
+            movingVertically = true
+            requester(index).requestFocusSoon()
+            movingVertically = false
+            memory.done()
+        }
+    }
     fun visibleStartSec(): Long = windowStart + (with(density) { scroll.value.toDp() } / PerMinute * 60).toLong()
     fun moveTo(target: Int) {
         if (target !in channels.indices) return
         scope.launch {
-            if (listState.layoutInfo.visibleItemsInfo.none { it.index == target }) {
-                listState.scrollToItem(target)
-                withFrameNanos { }
-            }
+            if (listState.layoutInfo.visibleItemsInfo.none { it.index == target }) listState.scrollToItem(target)
             movingVertically = true
-            runCatching { requester(target).requestFocus() }
+            requester(target).requestFocusSoon()
             withFrameNanos { }
             movingVertically = false
         }
@@ -275,6 +289,7 @@ private fun GuideGrid(
                             .fillMaxWidth()
                             .height(RowHeight)
                             .padding(vertical = 2.dp)
+                            .focusMemory(memory, channel.streamId.toString(), target = null)
                             .onFocusChanged { f ->
                                 if (f.hasFocus) {
                                     focusedRow = index
@@ -298,11 +313,17 @@ private fun GuideGrid(
                                 },
                         ) {
                             // Each row reads its own channel from the guide database as it scrolls into view.
-                            val programmes by produceState(emptyList<Programme>(), channel.streamId, version) {
+                            // Nothing to focus until it's loaded, so ▲/▼ wait for the real cell at the cursor.
+                            val programmes by produceState<List<Programme>?>(null, channel.streamId, version) {
                                 value = container.epg.programmesFor(channel.streamId, windowStart, windowEnd)
                             }
+                            val loaded = programmes
+                            if (loaded == null) {
+                                Spacer(Modifier.width(widthOf(windowEnd - windowStart)))
+                                return@Row
+                            }
                             ProgrammeCells(
-                                programmes, windowStart, windowEnd, now, timeFormat,
+                                loaded, windowStart, windowEnd, now, timeFormat,
                                 cursorSec = cursorSec,
                                 cursorRequester = requester(index),
                                 onCellFocused = { cellStart -> if (!movingVertically) cursorSec = maxOf(cellStart, visibleStartSec()) },

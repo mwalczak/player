@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -215,10 +216,18 @@ fun ChannelGrid(
     subtitle: (index: Int, channel: Channel) -> String? = { _, _ -> null },
 ) {
     val fixed by container.settings.gridColumns.collectAsStateWithLifecycle(0)
+    // Back from full screen, the remote lands on the channel that was playing (or the one it left).
+    val gridState = rememberLazyGridState()
+    val memory = rememberFocusMemory { container.lastPlayedStreamId?.toString() }
+    val target = memory.target { key -> channels.any { it.streamId.toString() == key } }
+    val targetIndex = target?.let { t -> channels.indexOfFirst { it.streamId.toString() == t } } ?: -1
+    RestoreFocus(memory, targetIndex, ready = channels.isNotEmpty(), gridState)
+
     val grid: @Composable (Modifier, (Int, Boolean) -> Unit, ((Int, Boolean) -> Unit)?) -> Unit = { gridModifier, click, focus ->
         LazyVerticalGrid(
             columns = if (fixed > 0) GridCells.Fixed(fixed) else GridCells.Adaptive(minSize = GRID_MIN_CELL),
             modifier = gridModifier.fillMaxSize(),
+            state = gridState,
             contentPadding = PaddingValues(12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -229,6 +238,7 @@ fun ChannelGrid(
                     container,
                     channel,
                     onClick = { click(index, focused) },
+                    modifier = Modifier.focusMemory(memory, channel.streamId.toString(), target),
                     subtitle = subtitle(index, channel),
                     onFocusChange = focus?.let { f -> { has -> focused = has; f(index, has) } },
                 )

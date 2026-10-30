@@ -57,7 +57,10 @@ import com.mwalczak.player.ui.home.categoryName
 import com.mwalczak.player.ui.home.ScreenHeader
 import com.mwalczak.player.ui.common.CardShape
 import com.mwalczak.player.ui.common.GRID_MIN_CELL
+import com.mwalczak.player.ui.common.RestoreFocus
 import com.mwalczak.player.ui.common.focusHighlight
+import com.mwalczak.player.ui.common.focusMemory
+import com.mwalczak.player.ui.common.rememberFocusMemory
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -68,6 +71,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Button
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
@@ -167,9 +171,15 @@ fun ListsTab(container: AppContainer, actions: Actions) {
         if (library.lists.isEmpty()) {
             EmptyState("Create lists like “Sports” or “News” and fill them with your channels.")
         } else {
+            // Back from a list, the remote lands on the list it was opened from.
+            val gridState = rememberLazyGridState()
+            val memory = rememberFocusMemory()
+            val target = memory.target { key -> library.lists.any { it.id == key } }
+            RestoreFocus(memory, library.lists.indexOfFirst { it.id == target }, ready = true, gridState)
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 260.dp),
                 modifier = Modifier.fillMaxSize(),
+                state = gridState,
                 contentPadding = PaddingValues(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -178,6 +188,7 @@ fun ListsTab(container: AppContainer, actions: Actions) {
                     val interaction = remember { MutableInteractionSource() }
                     Row(
                         Modifier
+                            .focusMemory(memory, list.id, target)
                             .fillMaxWidth()
                             .clip(CardShape)
                             .background(MaterialTheme.colorScheme.surfaceContainer)

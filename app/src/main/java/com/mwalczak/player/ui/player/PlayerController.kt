@@ -162,6 +162,7 @@ class PlayerController(
         noticeJob?.cancel()
         player.removeListener(listener)
         player.release()
+        if (recordRecent) container.playerStoppedAtMillis = System.currentTimeMillis()
     }
 
     private fun play(channel: Channel, notice: String?) {
@@ -169,6 +170,7 @@ class PlayerController(
         retryJob?.cancel()
         limitJob?.cancel()
         _state.update { it.copy(playing = channel, status = PlaybackStatus.Loading, epg = emptyList()) }
+        if (recordRecent) container.lastPlayedStreamId = channel.streamId
         showNotice(notice)
 
         val format = settings.format

@@ -85,6 +85,12 @@ class AppContainer(context: Context) {
     /** When the browsing preview last let go of its stream (it hands over to full screen). */
     @Volatile var previewStoppedAtMillis: Long = 0
 
+    /** When full screen last let go of its stream (the preview behind it takes over). */
+    @Volatile var playerStoppedAtMillis: Long = 0
+
+    /** The channel full screen played last, so the list behind it can put the remote back on it. */
+    @Volatile var lastPlayedStreamId: Int? = null
+
     /** Set right before navigating to the player screen. */
     var pendingQueue: PlaybackQueue? = null
 }
