@@ -48,6 +48,7 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   - Every device signed in with the same mybunny login shares one setup, both ways. After a reinstall, signing in brings everything back. The server never sees the login: the app derives a key from it (PBKDF2) and the server stores only a hash of that key.
   - Each setup has a share code (e.g. `ABCD-EFGH`). A friend enters it under *Use someone's setup* and either **follows** it (their device shows your setup and gets your changes) or **copies it once** and makes it their own. Logins are never shared this way.
   - The app syncs when it opens, every 5 minutes while open, and a moment after each change. A fresh install never uploads its empty setup over the saved one.
+  - **History**: the server keeps the last 100 versions, each with the time, the device name and the IP address it was saved from. Saves from the same device and address within 2 minutes count as one version. Settings → Sync & sharing → *History* lists them; picking one restores it on every device signed in with that login. The version it replaces stays in the history.
 - **Copy to TV**: Settings → *Copy favorites & settings to TV* sends your favorites (in order), lists, pinned categories, playback and guide settings and login to the TV app over Wi-Fi, so you don't set everything up twice. Open Bunny Player on the TV first.
 - **Export / import file**: Settings → *Backup file* → *Export favorites & settings* creates a file and opens the share sheet (WhatsApp, e-mail, Drive…).
   - Tick *Include login* to also share the server, username and password.
@@ -86,6 +87,8 @@ Install on a device or Fire TV with `adb install app/build/outputs/apk/debug/app
 ## CI
 
 `.github/workflows/build.yml` runs the unit tests and builds the APK on every push. On `main` it publishes a GitHub Release `build-<run number>` with `bunny-player.apk`. The APK's `versionCode` is the run number, which is how the in-app updater spots newer builds. Local builds are version 1 and never auto-update. All builds are signed with the committed `app/debug.keystore`, so any build installs over any other.
+
+`.github/workflows/sync-server.yml` runs whenever `server/` changes on `main`. Like ip.walczaki.com, it tests the sync server, pushes an image built from `server/Dockerfile` to GHCR (`ghcr.io/mwalczak/player-sync`), and applies `server/k8s.yaml` on the VPS's k3s over ssh (secrets `VPS_HOST`, `VPS_SSH_KEY`). The data lives in the `sync-data` volume in namespace `bunny`.
 
 ## Project layout
 

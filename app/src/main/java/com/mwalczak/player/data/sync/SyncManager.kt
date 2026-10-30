@@ -133,6 +133,35 @@ class SyncManager(
         if (linked) syncOwn()
     }
 
+    /** This login's saved versions, newest first. */
+    suspend fun history(): Result<List<SyncVersion>> = runCatching {
+        val creds = settings.currentCredentials() ?: throw IllegalStateException("Sign in first")
+        client.versions(keyFor(creds))
+    }
+
+    /**
+     * Puts an older version back: on this device now, and saved as the newest version so the
+     * other devices get it too. The version it replaces stays in the history.
+     */
+    suspend fun restore(revision: Int) = locked {
+        val creds = settings.currentCredentials() ?: return@locked
+        val key = keyFor(creds)
+        val data = client.version(key, revision).data ?: throw java.io.IOException("That version has no data")
+        apply(data)
+        var base = prefs.getInt(REVISION, 0).takeIf { it > 0 }
+        repeat(2) {
+            when (val result = client.save(key, base, data)) {
+                is Saved.Ok -> {
+                    record(result.code, result.revision)
+                    linked = true
+                    return@locked
+                }
+                // Saved elsewhere in the meantime: restoring wins anyway.
+                is Saved.Conflict -> base = result.current.revision
+            }
+        }
+    }
+
     /** Keeps what this device has now as its own setup, without further updates. */
     suspend fun stopFollowing() = locked {
         prefs.edit().remove(FOLLOW_CODE).remove(FOLLOW_REVISION).apply()

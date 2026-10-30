@@ -8,6 +8,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.filled.History
+import androidx.compose.runtime.LaunchedEffect
+import com.mwalczak.player.data.sync.SyncVersion
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CloudDone
@@ -48,7 +54,10 @@ fun SyncSection(container: AppContainer, username: String?) {
     val context = LocalContext.current
     var joining by remember { mutableStateOf(false) }
 
+    var showingHistory by remember { mutableStateOf(false) }
+
     if (joining) JoinDialog(container, onDismiss = { joining = false })
+    if (showingHistory) HistoryDialog(container, username, onDismiss = { showingHistory = false })
 
     val following = status.following
     val time = if (status.lastSyncedMillis > 0) DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(status.lastSyncedMillis)) else null
@@ -108,6 +117,14 @@ fun SyncSection(container: AppContainer, username: String?) {
         leadingContent = { Icon(Icons.Default.GroupAdd, null) },
         modifier = Modifier.clickable { joining = true },
     )
+    if (following == null && code != null) {
+        ListItem(
+            headlineContent = { Text("History") },
+            supportingContent = { Text("The last 100 saved versions – when, from which device and address. Pick one to go back to it.") },
+            leadingContent = { Icon(Icons.Default.History, null) },
+            modifier = Modifier.clickable { showingHistory = true },
+        )
+    }
     if (following != null) {
         val scope = rememberCoroutineScope()
         ListItem(
@@ -210,3 +227,91 @@ private fun JoinDialog(container: AppContainer, onDismiss: () -> Unit) {
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
+
+/** Saved versions, newest first; picking one (after a confirmation) makes it the current setup everywhere. */
+@Composable
+private fun HistoryDialog(container: AppContainer, username: String?, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var versions by remember { mutableStateOf<List<SyncVersion>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var picked by remember { mutableStateOf<SyncVersion?>(null) }
+    var restoring by remember { mutableStateOf(false) }
+    val format = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
+
+    LaunchedEffect(Unit) {
+        container.sync.history().onSuccess { versions = it }.onFailure { error = it.message ?: "Couldn't load the history" }
+    }
+
+    val choice = picked
+    if (choice != null) {
+        AlertDialog(
+            onDismissRequest = { if (!restoring) picked = null },
+            title = { Text("Go back to this version?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("${format.format(Date(choice.savedAt))} – ${choice.summary()}")
+                    Text(
+                        "It replaces the favorites, lists, pinned categories and settings on every device signed in as " +
+                            "${username ?: "you"}. What you have now stays in the history.",
+                    )
+                    if (restoring) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !restoring, onClick = {
+                    restoring = true
+                    scope.launch {
+                        container.sync.restore(choice.revision)
+                        restoring = false
+                        val failure = container.sync.status.value.error
+                        if (failure != null) {
+                            Toast.makeText(context, "Couldn't restore: $failure", Toast.LENGTH_LONG).show()
+                            picked = null
+                        } else {
+                            Toast.makeText(context, "Restored the version from ${format.format(Date(choice.savedAt))}", Toast.LENGTH_LONG).show()
+                            onDismiss()
+                        }
+                    }
+                }) { Text("Restore") }
+            },
+            dismissButton = { TextButton(enabled = !restoring, onClick = { picked = null }) { Text("Cancel") } },
+        )
+        return
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("History") },
+        text = {
+            val list = versions
+            when {
+                error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
+                list == null -> CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                list.isEmpty() -> Text("Nothing saved yet.")
+                else -> LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                    itemsIndexed(list, key = { _, v -> v.revision }) { index, version ->
+                        val where = listOf(version.device, version.ip).filter { it.isNotBlank() }.joinToString(" · ")
+                        ListItem(
+                            headlineContent = {
+                                Text(format.format(Date(version.savedAt)) + if (index == 0) "  (current)" else "")
+                            },
+                            supportingContent = {
+                                Column {
+                                    Text(version.summary())
+                                    if (where.isNotEmpty()) {
+                                        Text(where, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            },
+                            modifier = Modifier.clickable(enabled = index > 0) { picked = version },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+private fun SyncVersion.summary() = "$favorites favorites, $lists lists, $pinned pinned categories"

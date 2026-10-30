@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.intOrNull
@@ -43,6 +44,8 @@ private class FakeSyncServer : Interceptor {
     class Profile(val code: String, var revision: Int, var data: JsonObject)
 
     val byOwner = HashMap<String, Profile>()
+    val versions = HashMap<String, MutableList<Pair<Int, JsonObject>>>()
+    var lastDevice: String? = null
     private var nextCode = 0
     val url = "http://sync.test"
 
@@ -66,8 +69,18 @@ private class FakeSyncServer : Interceptor {
                     else -> { current.revision++; current.data = data }
                 }
                 val saved = byOwner.getValue(owner)
+                versions.getOrPut(owner) { mutableListOf() }.add(saved.revision to data)
+                lastDevice = request.header("X-Device")
                 send(request, 200, buildJsonObject { put("code", saved.code); put("revision", saved.revision) }.toString())
             }
+            path == "/v1/me/versions" -> send(request, 200, buildJsonObject {
+                put("versions", JsonArray(versions[owner].orEmpty().reversed().map { (revision, _) ->
+                    buildJsonObject { put("revision", revision); put("savedAt", revision * 1000L) }
+                }))
+            }.toString())
+            path.startsWith("/v1/me/versions/") -> versions[owner].orEmpty().firstOrNull { it.first == path.substringAfterLast('/').toInt() }
+                ?.let { (revision, data) -> send(request, 200, buildJsonObject { put("revision", revision); put("savedAt", 0); put("data", data) }.toString()) }
+                ?: send(request, 404, "{}")
             path.startsWith("/v1/profiles/") -> answer(request, byOwner.values.firstOrNull { it.code == path.substringAfterLast('/') }, since)
             else -> send(request, 404, "{}")
         }
@@ -178,5 +191,28 @@ class SyncManagerTest {
         assertEquals(listOf(1, 2, 3), saved(bob).library.favorites.map { it.streamId })
         assertEquals(3, aliceProfile.revision)
         friend.uninstall()
+    }
+
+    @Test
+    fun `an older version can be put back on every device`(): Unit = runBlocking {
+        settings.saveCredentials(alice)
+        val phone = Device()
+        phone.library.toggleFavorite(Channel(1, "TVN"))
+        phone.sync.syncNow()
+        phone.library.toggleFavorite(Channel(2, "TVP1"))
+        phone.library.toggleFavorite(Channel(1, "TVN"))
+        phone.sync.syncNow()
+        assertEquals(listOf(2), saved(alice).library.favorites.map { it.streamId })
+        assertTrue(fake.lastDevice!!.isNotBlank())
+
+        val history = phone.sync.history().getOrThrow()
+        assertEquals(listOf(2, 1), history.map { it.revision })
+        phone.sync.restore(1)
+        assertNull(phone.sync.status.value.error)
+        assertEquals(listOf(1), phone.favorites())
+        // Saved as the newest version, so the other devices get it too; the replaced one stays.
+        assertEquals(listOf(1), saved(alice).library.favorites.map { it.streamId })
+        assertEquals(listOf(3, 2, 1), phone.sync.history().getOrThrow().map { it.revision })
+        phone.uninstall()
     }
 }
