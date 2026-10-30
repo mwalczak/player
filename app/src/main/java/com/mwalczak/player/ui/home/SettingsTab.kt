@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mwalczak.player.AppContainer
 import com.mwalczak.player.data.AccountInfo
+import com.mwalczak.player.data.CatalogState
 import com.mwalczak.player.data.PlaybackSettings
 import com.mwalczak.player.data.StreamFormat
 import com.mwalczak.player.ui.Actions
@@ -56,6 +57,7 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
     }
 
     val update by container.updater.state.collectAsStateWithLifecycle()
+    val catalogState by container.catalog.state.collectAsStateWithLifecycle()
     val activity = LocalActivity.current
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).widthIn(max = 760.dp)) {
@@ -133,6 +135,12 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
         SectionHeader(startPadding = 16.dp, text = "Data")
         ListItem(
             headlineContent = { Text("Reload channel list") },
+            supportingContent = {
+                (catalogState as? CatalogState.Ready)?.catalog?.let { c ->
+                    val empty = c.emptyCategories.size
+                    Text("${c.channels.size} live channels in ${c.categories.size} categories" + if (empty > 0) " ($empty empty)" else "")
+                }
+            },
             leadingContent = { Icon(Icons.Default.Refresh, null) },
             modifier = Modifier.clickable {
                 scope.launch { creds?.let { container.catalog.load(it, force = true) } }

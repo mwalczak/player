@@ -1,7 +1,7 @@
 # Bunny Player
 
 An Android IPTV player for **Xtream Codes** providers such as [mybunny.tv](https://mybunny.tv).
-It is laid out for landscape use on phones, tablets and Android TV (remote / D-pad friendly).
+It works on phones (portrait and landscape), tablets and Android TV (remote / D-pad friendly).
 
 ## Install
 
@@ -14,7 +14,10 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
 ## Features
 
 - **Sign in once** with server URL, username and password, or paste an M3U link (`…/get.php?username=…&password=…`) and the fields fill in for you. The login is remembered, so the app opens straight into your channels.
-- **Landscape layout** for phone, tablet and TV: navigation rail on the left, channels in as many columns as fit, and a clear highlight around the focused item when using a TV remote.
+- **Adaptive layout**:
+  - Portrait phone: bottom navigation and one column, so typing a search leaves room for results.
+  - Landscape, tablet and TV: navigation rail on the left and channels in as many columns as fit.
+  - The player always goes landscape. On a TV remote, the focused item is clearly highlighted.
 - **Favorites first**: the app opens on your favorites when you have some. To add a channel, **long-press it** anywhere (or tap ☆). While watching, use the ☆ in the overlay or the red/bookmark button on a TV remote.
 - **Live TV** shows the provider's own categories (countries, sports…) in the server's order, plus "All channels" and "Recently watched". **Pin** 📌 categories (e.g. Poland) to keep them at the top.
 - **Search** across the whole catalog. Matching ignores case and accents and accepts words in any order ("one bbc" finds "UK: BBC One HD").

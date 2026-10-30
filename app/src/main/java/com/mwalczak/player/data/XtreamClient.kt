@@ -15,8 +15,8 @@ class XtreamClient(private val http: OkHttpClient) {
     suspend fun liveCategoriesRaw(creds: Credentials): String =
         get(ServerUrls.playerApi(creds, "get_live_categories"))
 
-    suspend fun liveStreamsRaw(creds: Credentials): String =
-        get(ServerUrls.playerApi(creds, "get_live_streams"))
+    suspend fun liveStreamsRaw(creds: Credentials, categoryId: String? = null): String =
+        get(ServerUrls.playerApi(creds, "get_live_streams", categoryId?.let { mapOf("category_id" to it) }.orEmpty()))
 
     suspend fun shortEpg(creds: Credentials, streamId: Int, limit: Int = 2): List<EpgEntry> {
         val body = get(ServerUrls.playerApi(creds, "get_short_epg", mapOf("stream_id" to "$streamId", "limit" to "$limit")))

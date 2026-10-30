@@ -2,6 +2,7 @@
 
 package com.mwalczak.player.ui.player
 
+import android.content.pm.ActivityInfo
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
@@ -500,7 +501,7 @@ private fun FailurePanel(message: String, onRetry: () -> Unit, onNext: () -> Uni
     }
 }
 
-/** Hidden system bars while the player is on screen; restored when leaving. (The app is landscape-only.) */
+/** Landscape + hidden system bars while the player is on screen; restored when leaving. */
 @Composable
 private fun FullscreenLandscape() {
     val view = LocalView.current
@@ -508,10 +509,13 @@ private fun FullscreenLandscape() {
     DisposableEffect(Unit) {
         val window = activity.window
         val insets = WindowCompat.getInsetsController(window, view)
+        val previousOrientation = activity.requestedOrientation
+        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         insets.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         insets.hide(WindowInsetsCompat.Type.systemBars())
         onDispose {
             insets.show(WindowInsetsCompat.Type.systemBars())
+            activity.requestedOrientation = previousOrientation
         }
     }
 }

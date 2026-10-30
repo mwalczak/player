@@ -3,6 +3,11 @@ package com.mwalczak.player.data
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +26,8 @@ class Catalog(
     private val searchIndex: List<Pair<String, Channel>> = channels.map { ChannelMatcher.searchKey(it.name) to it }
 
     fun channelsIn(categoryId: String): List<Channel> = byCategory[categoryId].orEmpty()
+
+    val emptyCategories: List<Category> get() = categories.filter { byCategory[it.id].isNullOrEmpty() }
 
     fun search(query: String, limit: Int = 500): List<Channel> {
         val terms = ChannelMatcher.searchKey(query).split(' ').filter { it.isNotBlank() }
@@ -61,7 +68,7 @@ class CatalogRepository(
         if (!force && current != null) return@withLock
 
         val cats = cacheFile(creds, "categories")
-        val streams = cacheFile(creds, "streams")
+        val streams = cacheFile(creds, "channels")
         val cached = if (current == null) readCache(cats, streams) else null
         if (cached != null) _state.value = CatalogState.Ready(cached)
 
@@ -76,8 +83,13 @@ class CatalogRepository(
                 val s = async { client.liveStreamsRaw(creds) }
                 c.await() to s.await()
             }
-            val loaded = withContext(Dispatchers.Default) {
+            var loaded = withContext(Dispatchers.Default) {
                 Catalog(XtreamParser.parseCategories(catsRaw), XtreamParser.parseLiveStreams(streamsRaw), System.currentTimeMillis())
+            }
+            // Some panels cap the "all channels" answer; categories that come back empty give it away.
+            // Then ask category by category (which such panels answer in full) and merge.
+            if (loaded.emptyCategories.isNotEmpty()) {
+                loaded = withPerCategoryChannels(creds, loaded)
             }
             if (loaded.channels.isEmpty() && shown != null) {
                 // Treat an empty answer as a hiccup rather than wiping a working catalog.
@@ -86,7 +98,7 @@ class CatalogRepository(
             }
             withContext(Dispatchers.IO) {
                 cats.writeText(catsRaw)
-                streams.writeText(streamsRaw)
+                streams.writeText(cacheJson.encodeToString(channelList, loaded.channels))
             }
             _state.value = CatalogState.Ready(loaded)
         } catch (e: Exception) {
@@ -98,18 +110,43 @@ class CatalogRepository(
         _state.value = CatalogState.Idle
         if (creds != null) {
             cacheFile(creds, "categories").delete()
-            cacheFile(creds, "streams").delete()
+            cacheFile(creds, "channels").delete()
         }
+    }
+
+    private suspend fun withPerCategoryChannels(creds: Credentials, catalog: Catalog): Catalog {
+        val limit = Semaphore(8)
+        val perCategory = coroutineScope {
+            catalog.categories.map { category ->
+                async {
+                    limit.withPermit {
+                        runCatching { XtreamParser.parseLiveStreams(client.liveStreamsRaw(creds, category.id)) }
+                            .getOrDefault(emptyList())
+                    }
+                }
+            }.awaitAll()
+        }
+        val merged = withContext(Dispatchers.Default) { mergeChannels(catalog.channels, perCategory.flatten()) }
+        return Catalog(catalog.categories, merged, catalog.loadedAtMillis)
     }
 
     private suspend fun readCache(cats: File, streams: File): Catalog? = withContext(Dispatchers.IO) {
         if (!cats.exists() || !streams.exists()) return@withContext null
         runCatching {
-            val channels = XtreamParser.parseLiveStreams(streams.readText())
+            val channels = cacheJson.decodeFromString(channelList, streams.readText())
             if (channels.isEmpty()) null
             else Catalog(XtreamParser.parseCategories(cats.readText()), channels, streams.lastModified())
         }.getOrNull()
     }
 
     private fun cacheFile(creds: Credentials, name: String) = File(context.cacheDir, "catalog_${creds.accountKey}_$name.json")
+
+    private val cacheJson = Json { ignoreUnknownKeys = true }
+    private val channelList = ListSerializer(Channel.serializer())
+}
+
+/** [base] plus any channels from [extra] it doesn't have yet, keeping the server's order. */
+internal fun mergeChannels(base: List<Channel>, extra: List<Channel>): List<Channel> {
+    val seen = base.mapTo(HashSet()) { it.streamId }
+    return base + extra.filter { seen.add(it.streamId) }
 }

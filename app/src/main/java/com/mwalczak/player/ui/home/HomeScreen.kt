@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -49,6 +50,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedTextField
@@ -113,31 +116,8 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
     }
     val catalogState by container.catalog.state.collectAsStateWithLifecycle()
 
-    // The app is landscape-only (phone, tablet, TV), so navigation lives in a rail on the left
-    // and all vertical space goes to the channels.
-    Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        NavigationRail(
-            windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical),
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            header = { CastButton(container) },
-        ) {
-            Spacer(Modifier.weight(1f))
-            Tab.entries.forEach {
-                NavigationRailItem(
-                    selected = tab == it,
-                    onClick = { tab = it },
-                    icon = { Icon(it.icon, contentDescription = null) },
-                    label = { Text(it.label, maxLines = 1) },
-                )
-            }
-            Spacer(Modifier.weight(1f))
-        }
-        Column(
-            Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .windowInsetsPadding(ContentInsets),
-        ) {
+    val content: @Composable (Modifier) -> Unit = { modifier ->
+        Column(modifier) {
             if (catalogState is CatalogState.Loading || (catalogState as? CatalogState.Ready)?.refreshing == true) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
             }
@@ -152,6 +132,61 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
                 }
             }
             RemoteBar(container, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp))
+        }
+    }
+
+    BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        if (maxWidth < 600.dp) {
+            // Portrait phone: title bar on top, navigation at the bottom, one column of channels.
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                        .padding(start = 16.dp, end = 4.dp, top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(tab.label, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    CastButton(container)
+                }
+                content(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
+                )
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                    Tab.entries.forEach {
+                        NavigationBarItem(
+                            selected = tab == it,
+                            onClick = { tab = it },
+                            icon = { Icon(it.icon, contentDescription = null) },
+                            label = { Text(it.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                        )
+                    }
+                }
+            }
+        } else {
+            // Landscape phone, tablet, TV: navigation in a rail on the left, all height for channels.
+            Row(Modifier.fillMaxSize()) {
+                NavigationRail(
+                    windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    header = { CastButton(container) },
+                ) {
+                    Spacer(Modifier.weight(1f))
+                    Tab.entries.forEach {
+                        NavigationRailItem(
+                            selected = tab == it,
+                            onClick = { tab = it },
+                            icon = { Icon(it.icon, contentDescription = null) },
+                            label = { Text(it.label, maxLines = 1) },
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                }
+                content(Modifier.weight(1f).fillMaxHeight().windowInsetsPadding(ContentInsets))
+            }
         }
     }
 }
@@ -421,24 +456,41 @@ fun CategoryScreen(container: AppContainer, actions: Actions, categoryId: String
     }
 }
 
-/** Back button + title on the left, optional [actions] (e.g. a filter field) on the right. */
+/**
+ * Back button + title, and optional [actions] (e.g. a filter field): on the same row when there
+ * is room, on a second row on a portrait phone.
+ */
 @Composable
-fun ScreenHeader(title: String, onBack: () -> Unit, actions: @Composable () -> Unit = {}) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-        Text(
-            title,
-            style = MaterialTheme.typography.titleLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
-        )
-        Spacer(Modifier.weight(0.01f))
-        actions()
+fun ScreenHeader(title: String, onBack: () -> Unit, actions: (@Composable () -> Unit)? = null) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val wide = maxWidth >= 600.dp
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = !wide || actions == null),
+                )
+                if (wide && actions != null) {
+                    Spacer(Modifier.weight(0.01f))
+                    actions()
+                }
+            }
+            if (!wide && actions != null) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                ) { actions() }
+            }
+        }
     }
 }
 
