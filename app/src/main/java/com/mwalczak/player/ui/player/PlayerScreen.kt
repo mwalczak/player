@@ -1,0 +1,482 @@
+@file:OptIn(UnstableApi::class)
+
+package com.mwalczak.player.ui.player
+
+import android.content.pm.ActivityInfo
+import android.view.ViewGroup
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
+import androidx.annotation.OptIn
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.nativeKeyCode
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
+import com.mwalczak.player.AppContainer
+import com.mwalczak.player.data.Credentials
+import com.mwalczak.player.data.EpgEntry
+import com.mwalczak.player.data.PlaybackSettings
+import com.mwalczak.player.ui.common.ChannelLogo
+import kotlinx.coroutines.delay
+import java.text.DateFormat
+import java.util.Date
+import kotlin.math.abs
+
+private val resizeModes = listOf(
+    AspectRatioFrameLayout.RESIZE_MODE_FIT to "Fit",
+    AspectRatioFrameLayout.RESIZE_MODE_ZOOM to "Zoom",
+    AspectRatioFrameLayout.RESIZE_MODE_FILL to "Stretch",
+)
+
+@Composable
+fun PlayerScreen(container: AppContainer, onExit: () -> Unit) {
+    val queue = remember { container.pendingQueue }
+    val creds by produceState<Credentials?>(null) { value = container.settings.currentCredentials() }
+    if (queue == null) {
+        LaunchedEffect(Unit) { onExit() }
+        return
+    }
+    val c = creds ?: return Box(Modifier.fillMaxSize().background(Color.Black))
+    PlayerContent(container, c, queue, onExit)
+}
+
+@Composable
+private fun PlayerContent(
+    container: AppContainer,
+    creds: Credentials,
+    queue: com.mwalczak.player.PlaybackQueue,
+    onExit: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val controller = remember { PlayerController(context, container, creds, queue, scope) }
+    val state by controller.state.collectAsStateWithLifecycle()
+    val settings by container.settings.playback.collectAsStateWithLifecycle(null)
+    val library by container.library.library.collectAsStateWithLifecycle()
+
+    var overlay by remember { mutableStateOf(true) }
+    var panel by remember { mutableStateOf(false) }
+    var resizeIndex by remember { mutableIntStateOf(0) }
+    var interaction by remember { mutableIntStateOf(0) }
+    val focus = remember { FocusRequester() }
+
+    // Start once the settings are known, and keep the controller in sync if they change.
+    var started by remember { mutableStateOf(false) }
+    LaunchedEffect(settings) {
+        val s = settings ?: return@LaunchedEffect
+        controller.settings = s
+        if (!started) {
+            started = true
+            controller.start()
+        }
+    }
+
+    DisposableEffect(Unit) { onDispose { controller.release() } }
+    FullscreenLandscape()
+
+    // Pause in the background; jump back to the live edge on return.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> controller.player.pause()
+                Lifecycle.Event.ON_START -> if (started) controller.resumeLive()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Auto-hide the overlay after a few seconds without interaction.
+    LaunchedEffect(overlay, interaction, state.status) {
+        if (overlay && !panel && state.status == PlaybackStatus.Playing) {
+            delay(5_000)
+            overlay = false
+        }
+    }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+
+    BackHandler(enabled = panel || overlay) {
+        if (panel) panel = false else overlay = false
+    }
+
+    fun poke() {
+        overlay = true
+        interaction++
+    }
+
+    val isFavorite = library.favorites.any { it.streamId == state.playing.streamId }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .focusRequester(focus)
+            .focusable()
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown || panel) return@onKeyEvent false
+                // Red / bookmark button on TV remotes: favorite the channel being watched.
+                if (event.key.nativeKeyCode == android.view.KeyEvent.KEYCODE_PROG_RED || event.key == Key.Bookmark) {
+                    container.library.toggleFavorite(state.playing)
+                    poke()
+                    return@onKeyEvent true
+                }
+                when (event.key) {
+                    Key.ChannelUp, Key.DirectionUp -> { controller.next(); poke(); true }
+                    Key.ChannelDown, Key.DirectionDown -> { controller.previous(); poke(); true }
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> { panel = true; true }
+                    Key.DirectionLeft, Key.DirectionRight, Key.Info, Key.Menu -> { poke(); true }
+                    else -> false
+                }
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { if (overlay) overlay = false else poke() })
+            }
+            .pointerInput(Unit) {
+                // Swipe up / down anywhere to zap, like flipping channels on a TV.
+                var total = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { total = 0f },
+                    onDragEnd = {
+                        if (abs(total) > 120f) {
+                            if (total < 0) controller.next() else controller.previous()
+                            poke()
+                        }
+                    },
+                    onVerticalDrag = { _, dy -> total += dy },
+                )
+            },
+    ) {
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                    useController = false
+                    keepScreenOn = true
+                    setShutterBackgroundColor(android.graphics.Color.BLACK)
+                    player = controller.player
+                }
+            },
+            update = { it.resizeMode = resizeModes[resizeIndex].first },
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        when (val status = state.status) {
+            PlaybackStatus.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+            is PlaybackStatus.Failed -> FailurePanel(
+                message = status.message,
+                onRetry = { controller.select(state.index) },
+                onNext = { controller.next() },
+                modifier = Modifier.align(Alignment.Center),
+            )
+            PlaybackStatus.Playing -> Unit
+        }
+
+        AnimatedVisibility(
+            visible = state.notice != null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 72.dp),
+        ) {
+            Text(
+                state.notice.orEmpty(),
+                color = Color.White,
+                modifier = Modifier
+                    .background(Color(0xCC5A2A12), RoundedCornerShape(20.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+
+        AnimatedVisibility(visible = overlay, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
+            Overlay(
+                state = state,
+                isFavorite = isFavorite,
+                resizeLabel = resizeModes[resizeIndex].second,
+                onBack = onExit,
+                onFavorite = { container.library.toggleFavorite(state.playing); poke() },
+                onResize = { resizeIndex = (resizeIndex + 1) % resizeModes.size; poke() },
+                onList = { panel = true },
+                onPrevious = { controller.previous(); poke() },
+                onNext = { controller.next(); poke() },
+            )
+        }
+
+        AnimatedVisibility(
+            visible = panel,
+            enter = slideInHorizontally { it },
+            exit = slideOutHorizontally { it },
+            modifier = Modifier.align(Alignment.CenterEnd),
+        ) {
+            ChannelPanel(state) { index ->
+                controller.select(index)
+                panel = false
+                poke()
+            }
+        }
+    }
+
+    // Give key focus back to the player when the panel closes, so the remote keeps zapping.
+    LaunchedEffect(panel) { if (!panel) runCatching { focus.requestFocus() } }
+}
+
+@Composable
+private fun Overlay(
+    state: PlayerUiState,
+    isFavorite: Boolean,
+    resizeLabel: String,
+    onBack: () -> Unit,
+    onFavorite: () -> Unit,
+    onResize: () -> Unit,
+    onList: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+) {
+    val scrim = Color(0xB3000000)
+    Box(Modifier.fillMaxSize()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .background(Brush.verticalGradient(listOf(scrim, Color.Transparent)))
+                .safeDrawingPadding()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White) }
+            ChannelLogo(state.playing.icon, Modifier.size(44.dp))
+            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                Text(
+                    state.playing.name,
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    "${state.index + 1} / ${state.channels.size} · ${state.queueTitle}",
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                )
+            }
+            IconButton(onClick = onFavorite) {
+                Icon(
+                    if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                    if (isFavorite) "Remove from favorites" else "Add to favorites",
+                    tint = if (isFavorite) MaterialTheme.colorScheme.primary else Color.White,
+                )
+            }
+            IconButton(onClick = onResize) { Icon(Icons.Default.AspectRatio, "Aspect: $resizeLabel", tint = Color.White) }
+            IconButton(onClick = onList) { Icon(Icons.AutoMirrored.Filled.List, "Channel list", tint = Color.White) }
+        }
+
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .background(Brush.verticalGradient(listOf(Color.Transparent, scrim)))
+                .safeDrawingPadding()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            state.epg.firstOrNull()?.let { NowPlaying(it, state.epg.getOrNull(1)) }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onPrevious, enabled = state.channels.size > 1) {
+                    Icon(Icons.Default.SkipPrevious, "Previous channel", tint = Color.White, modifier = Modifier.size(36.dp))
+                }
+                Spacer(Modifier.width(32.dp))
+                IconButton(onClick = onNext, enabled = state.channels.size > 1) {
+                    Icon(Icons.Default.SkipNext, "Next channel", tint = Color.White, modifier = Modifier.size(36.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NowPlaying(now: EpgEntry, next: EpgEntry?) {
+    val time = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
+    val nowSec = System.currentTimeMillis() / 1000
+    val progress = ((nowSec - now.startEpochSec).toFloat() / (now.endEpochSec - now.startEpochSec).coerceAtLeast(1))
+        .coerceIn(0f, 1f)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            "Now: ${now.title}",
+            color = Color.White,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth(0.5f))
+        if (next != null) {
+            Text(
+                "${time.format(Date(next.startEpochSec * 1000))}  Next: ${next.title}",
+                color = Color.White.copy(alpha = 0.7f),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChannelPanel(state: PlayerUiState, onSelect: (Int) -> Unit) {
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (state.index - 3).coerceAtLeast(0))
+    val first = remember { FocusRequester() }
+    LazyColumn(
+        state = listState,
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(320.dp)
+            .background(Color(0xE6101418))
+            .safeDrawingPadding(),
+    ) {
+        item {
+            Text(
+                state.queueTitle,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(16.dp),
+            )
+        }
+        itemsIndexed(state.channels, key = { _, c -> c.streamId }) { index, channel ->
+            val selected = index == state.index
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (selected) Modifier.focusRequester(first) else Modifier)
+                    .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                    .clickable { onSelect(index) }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("${index + 1}", color = Color.White.copy(alpha = 0.6f), modifier = Modifier.width(32.dp))
+                ChannelLogo(channel.icon, Modifier.size(36.dp))
+                Text(channel.name, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+    // Put D-pad focus on the current channel so a remote can scroll from there.
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+}
+
+@Composable
+private fun FailurePanel(message: String, onRetry: () -> Unit, onNext: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .padding(24.dp)
+            .background(Color(0xCC000000), RoundedCornerShape(16.dp))
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(message, color = Color.White, style = MaterialTheme.typography.bodyLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = onRetry) { Text("Retry") }
+            OutlinedButton(onClick = onNext) { Text("Next channel") }
+        }
+    }
+}
+
+/** Landscape + hidden system bars while the player is on screen; restored when leaving. */
+@Composable
+private fun FullscreenLandscape() {
+    val view = LocalView.current
+    val activity = LocalActivity.current ?: return
+    DisposableEffect(Unit) {
+        val window = activity.window
+        val insets = WindowCompat.getInsetsController(window, view)
+        val previousOrientation = activity.requestedOrientation
+        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        insets.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        insets.hide(WindowInsetsCompat.Type.systemBars())
+        onDispose {
+            insets.show(WindowInsetsCompat.Type.systemBars())
+            activity.requestedOrientation = previousOrientation
+        }
+    }
+}
