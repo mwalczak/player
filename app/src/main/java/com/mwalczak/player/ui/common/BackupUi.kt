@@ -47,7 +47,7 @@ fun ExportDialog(container: AppContainer, onDismiss: () -> Unit) {
         title = { Text("Export favorites & settings") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Favorites, lists, pinned categories, playback and guide settings go into one file you can send or keep.")
+                Text("Favorites, lists, pinned categories, playback and guide settings go into one file you can send or keep. Nothing you watched is included.")
                 Row(
                     Modifier.fillMaxWidth().clickable { includeLogin = !includeLogin },
                     verticalAlignment = Alignment.CenterVertically,

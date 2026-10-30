@@ -2,6 +2,7 @@ package com.mwalczak.player.data
 
 import com.mwalczak.player.cast.SyncPayload
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -26,6 +27,17 @@ class BackupTest {
         assertThrows(IllegalArgumentException::class.java) { Backups.decode("not json") }
         val other = Backups.encode(Backup(data = payload(Library()))).replace("bunny-player", "something-else")
         assertThrows(IllegalArgumentException::class.java) { Backups.decode(other) }
+    }
+
+    @Test
+    fun `the file has what was set up but no watch history`() {
+        val library = Library(favorites = listOf(Channel(1, "TVN")), recent = listOf(Channel(9, "Watched")))
+        val text = Backups.encode(Backup(data = payload(library)))
+        assertFalse(text.contains("recent"))
+        assertFalse(text.contains("Watched"))
+        val back = Backups.decode(text)
+        assertEquals(listOf(1), back.data.library.favorites.map { it.streamId })
+        assertEquals(emptyList<Channel>(), back.data.library.recent)
     }
 
     @Test

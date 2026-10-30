@@ -4,6 +4,9 @@ import com.mwalczak.player.cast.SyncPayload
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 /** Login inside a backup file; only present when the user explicitly chose to include it. */
 @Serializable
@@ -26,7 +29,13 @@ data class Backup(
 object Backups {
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true }
 
-    fun encode(backup: Backup): String = json.encodeToString(Backup.serializer(), backup)
+    /** The file holds only what was set up (favorites, lists, …): no "recently watched", not even empty. */
+    fun encode(backup: Backup): String {
+        val tree = json.encodeToJsonElement(Backup.serializer(), backup).jsonObject
+        val data = tree.getValue("data").jsonObject
+        val library = JsonObject(data.getValue("library").jsonObject - "recent")
+        return json.encodeToString(JsonElement.serializer(), JsonObject(tree + ("data" to JsonObject(data + ("library" to library)))))
+    }
 
     /** Parses a backup file, rejecting anything that isn't one of ours. */
     fun decode(text: String): Backup {
