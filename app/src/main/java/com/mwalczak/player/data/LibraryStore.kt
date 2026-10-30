@@ -71,6 +71,9 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
         lib.copy(pinnedCategories = if (id in lib.pinnedCategories) lib.pinnedCategories - id else lib.pinnedCategories + id)
     }
 
+    /** Replaces everything, e.g. with favorites and lists copied from the phone. */
+    fun replaceAll(library: Library) = update { library }
+
     fun addRecent(channel: Channel) = update { lib ->
         lib.copy(recent = (listOf(channel) + lib.recent.filterNot { it.streamId == channel.streamId }).take(30))
     }

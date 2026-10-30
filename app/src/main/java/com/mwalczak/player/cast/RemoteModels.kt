@@ -2,6 +2,7 @@ package com.mwalczak.player.cast
 
 import com.mwalczak.player.PlaybackQueue
 import com.mwalczak.player.data.Channel
+import com.mwalczak.player.data.Library
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -11,7 +12,19 @@ data class RemoteDevice(val name: String, val host: String, val port: Int) {
         get() = "http://${if (host.contains(':')) "[${host.replace("%", "%25")}]" else host}:$port"
 }
 
-/** Body of `POST /command`. [type] is one of play, next, previous, last, stop, login. */
+/** Everything "Copy to TV" sends: favorites, lists, pinned categories and settings. */
+@Serializable
+data class SyncPayload(
+    val library: Library,
+    val format: String,
+    val tryAlternates: Boolean,
+    val nextInList: Boolean,
+    val stallTimeoutSec: Int,
+    val epgEnabled: Boolean,
+    val epgUrl: String,
+)
+
+/** Body of `POST /command`. [type] is one of play, next, previous, last, stop, login, sync. */
 @Serializable
 data class RemoteRequest(
     val type: String,
@@ -21,6 +34,7 @@ data class RemoteRequest(
     val server: String? = null,
     val username: String? = null,
     val password: String? = null,
+    val sync: SyncPayload? = null,
 )
 
 /** What a receiver reports from `GET /status` and after every command. */
@@ -42,6 +56,8 @@ sealed interface RemoteCommand {
     data object Previous : RemoteCommand
     data object Last : RemoteCommand
     data object Stop : RemoteCommand
+    /** Favorites and settings were just copied here from another device. */
+    data object Synced : RemoteCommand
 }
 
 /** What the local player is showing, published for remote status requests. */

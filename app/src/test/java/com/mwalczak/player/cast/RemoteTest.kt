@@ -57,4 +57,20 @@ class RemoteTest {
         assertEquals("http://192.168.1.20:4000", RemoteDevice("TV", "192.168.1.20", 4000).baseUrl)
         assertEquals("http://[fe80::1]:4000", RemoteDevice("TV", "fe80::1", 4000).baseUrl)
     }
+
+    @Test
+    fun `copy-to-tv payload keeps favorites order, lists and settings`() {
+        val library = com.mwalczak.player.data.Library(
+            favorites = listOf(Channel(2, "TVN24"), Channel(1, "TVP1")),
+            lists = listOf(com.mwalczak.player.data.UserList("l1", "Sport", listOf(Channel(3, "Polsat Sport")))),
+            pinnedCategories = listOf("5"),
+        )
+        val request = RemoteRequest(
+            "sync", server = "http://s", username = "u", password = "p",
+            sync = SyncPayload(library, "HLS", tryAlternates = false, nextInList = true, stallTimeoutSec = 8, epgEnabled = true, epgUrl = "https://g/x.xml.gz"),
+        )
+        val decoded = remoteJson.decodeFromString(RemoteRequest.serializer(), remoteJson.encodeToString(RemoteRequest.serializer(), request))
+        assertEquals(request, decoded)
+        assertEquals(listOf(2, 1), decoded.sync!!.library.favorites.map { it.streamId })
+    }
 }

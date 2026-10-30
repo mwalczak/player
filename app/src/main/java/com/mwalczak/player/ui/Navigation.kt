@@ -110,7 +110,14 @@ fun AppNavigation(container: AppContainer) {
     // Channels sent from a phone (this device acting as the TV).
     LaunchedEffect(Unit) {
         container.remote.commands.collect { command ->
-            if (command is RemoteCommand.Play) actions.playLocally(command.queue)
+            when (command) {
+                is RemoteCommand.Play -> actions.playLocally(command.queue)
+                RemoteCommand.Synced -> {
+                    if (nav.currentDestination?.route == Routes.LOGIN) actions.loggedIn()
+                    Toast.makeText(context, "Favorites and settings copied from your phone", Toast.LENGTH_LONG).show()
+                }
+                else -> Unit
+            }
         }
     }
 

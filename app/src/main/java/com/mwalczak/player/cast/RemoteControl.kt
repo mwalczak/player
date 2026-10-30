@@ -8,6 +8,11 @@ import android.provider.Settings
 import com.mwalczak.player.PlaybackQueue
 import com.mwalczak.player.data.CatalogRepository
 import com.mwalczak.player.data.Credentials
+import com.mwalczak.player.data.EpgSettings
+import com.mwalczak.player.data.LibraryStore
+import com.mwalczak.player.data.PlaybackSettings
+import com.mwalczak.player.data.StreamFormat
+import kotlinx.coroutines.flow.first
 import com.mwalczak.player.data.SettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +54,7 @@ class RemoteControl(
     http: OkHttpClient,
     private val settings: SettingsStore,
     private val catalog: CatalogRepository,
+    private val library: LibraryStore,
     private val scope: CoroutineScope,
 ) {
     private val http = http.newBuilder()
@@ -131,6 +137,33 @@ class RemoteControl(
         }
     }
 
+    /**
+     * "Copy to TV": replaces favorites, lists, pinned categories and settings on [device] with
+     * this device's, and signs it in with our account.
+     */
+    suspend fun syncTo(device: RemoteDevice): Result<RemoteStatus> = withContext(Dispatchers.IO) {
+        runCatching {
+            val creds = settings.currentCredentials() ?: throw IOException("Sign in on this device first")
+            val playback = settings.playback.first()
+            val epg = settings.epg.first()
+            val payload = SyncPayload(
+                library = library.library.value.copy(recent = emptyList()),
+                format = playback.format.name,
+                tryAlternates = playback.tryAlternates,
+                nextInList = playback.nextInList,
+                stallTimeoutSec = playback.stallTimeoutSec,
+                epgEnabled = epg.enabled,
+                epgUrl = epg.url,
+            )
+            val status = send(
+                device,
+                RemoteRequest("sync", server = creds.server, username = creds.username, password = creds.password, sync = payload),
+            )
+            status.error?.let { throw IOException(it) }
+            status
+        }
+    }
+
     suspend fun command(device: RemoteDevice, type: String): Result<RemoteStatus> = withContext(Dispatchers.IO) {
         runCatching { send(device, RemoteRequest(type)) }
     }
@@ -188,6 +221,30 @@ class RemoteControl(
                     settings.saveCredentials(creds)
                     scope.launch { catalog.load(creds, force = true) }
                 }
+            }
+            "sync" -> {
+                val payload = cmd.sync ?: return 400 to currentStatus(error = "nothing to copy")
+                runBlocking {
+                    cmd.server?.let { server ->
+                        val creds = Credentials(server, cmd.username.orEmpty(), cmd.password.orEmpty())
+                        if (settings.currentCredentials() != creds) {
+                            settings.saveCredentials(creds)
+                            scope.launch { catalog.load(creds, force = true) }
+                        }
+                    }
+                    // Keep this device's own "recently watched".
+                    library.replaceAll(payload.library.copy(recent = library.library.value.recent))
+                    settings.updatePlayback {
+                        PlaybackSettings(
+                            format = runCatching { StreamFormat.valueOf(payload.format) }.getOrDefault(it.format),
+                            tryAlternates = payload.tryAlternates,
+                            nextInList = payload.nextInList,
+                            stallTimeoutSec = payload.stallTimeoutSec,
+                        )
+                    }
+                    settings.updateEpg(EpgSettings(payload.epgEnabled, payload.epgUrl))
+                }
+                emit(RemoteCommand.Synced)
             }
             "play" -> {
                 if (runBlocking { settings.currentCredentials() } == null) return 409 to currentStatus(error = NOT_SIGNED_IN)

@@ -54,7 +54,7 @@ class AppContainer(context: Context) {
     val catalog = CatalogRepository(context, xtream)
     val library = LibraryStore(context, appScope)
     val updater = Updater(context, httpClient, appScope, BuildConfig.VERSION_CODE)
-    val remote = RemoteControl(context, httpClient, settings, catalog, appScope)
+    val remote = RemoteControl(context, httpClient, settings, catalog, library, appScope)
     val epg = EpgRepository(context, httpClient, xtream)
 
     /** Current time in epoch seconds, ticking every 30 s, for "now" lines and progress bars. */
