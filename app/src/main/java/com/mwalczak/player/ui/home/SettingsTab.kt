@@ -105,6 +105,7 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             scope.launch { container.settings.updateEpg(epgSettings.copy(sources = chosen)) }
         }
     }
+    val gridColumns by container.settings.gridColumns.collectAsStateWithLifecycle(0)
     var copyingToTv by remember { mutableStateOf(false) }
     val importContext = LocalContext.current
     var exporting by remember { mutableStateOf(false) }
@@ -175,6 +176,15 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             ListItem(headlineContent = { Text(it, color = MaterialTheme.colorScheme.error) })
         }
 
+        SectionHeader(startPadding = 16.dp, text = "Display")
+        ListItem(
+            headlineContent = { Text("Columns in channel lists: ${if (gridColumns == 0) "automatic" else gridColumns.toString()}") },
+            supportingContent = { Text("Fewer columns leave more room for channel names. Tap to change (automatic, 1, 2, 3, 4).") },
+            modifier = Modifier.clickable {
+                scope.launch { container.settings.setGridColumns(if (gridColumns >= 4) 0 else gridColumns + 1) }
+            },
+        )
+
         SectionHeader(startPadding = 16.dp, text = "Stream format")
         StreamFormat.entries.forEach { format ->
             ListItem(
@@ -224,7 +234,7 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
                                 (epgState.error?.let { "\n$it" } ?: "")
                         }
                         epgState.error != null -> epgState.error!!
-                        else -> "Downloads guides for the countries in your channel list"
+                        else -> "Not downloaded yet – tap Download guide now"
                     },
                 )
             },
@@ -260,9 +270,10 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
                 modifier = Modifier.clickable { editingEpgUrl = true },
             )
             ListItem(
-                headlineContent = { Text("Refresh guide now") },
+                headlineContent = { Text(if (epgState.updatedAtMillis > 0) "Update guide now" else "Download guide now") },
+                supportingContent = { Text("Downloads the guides above (~${activeSources.sumOf { it.approxMb }} MB) and matches them to your channels. Takes a few minutes; you can keep watching.") },
                 leadingContent = { Icon(Icons.Default.Refresh, null) },
-                modifier = Modifier.clickable { scope.launch { container.refreshEpg() } },
+                modifier = Modifier.clickable(enabled = !epgState.loading) { scope.launch { container.refreshEpg() } },
             )
         }
 

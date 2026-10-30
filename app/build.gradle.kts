@@ -47,6 +47,13 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all { test ->
+            // Optional Maven mirror for Robolectric's Android runtime download (e.g. when Maven Central rate-limits).
+            System.getenv("ROBOLECTRIC_REPO_URL")?.let { test.systemProperty("robolectric.dependency.repo.url", it) }
+        }
+    }
     buildFeatures {
         compose = true
         buildConfig = true
@@ -81,4 +88,7 @@ dependencies {
     testImplementation(libs.junit)
     // XmlPullParser implementation for unit tests (Android provides its own at runtime).
     testImplementation(libs.kxml2)
+    // Runs real Android code (SQLite, app startup) in unit tests.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 }

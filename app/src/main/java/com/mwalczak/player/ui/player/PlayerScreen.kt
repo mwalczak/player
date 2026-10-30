@@ -68,6 +68,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.foundation.border
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -228,9 +231,17 @@ private fun PlayerContent(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Auto-hide the overlay after a few seconds without interaction.
-    LaunchedEffect(overlay, interaction, state.status) {
-        if (overlay && !panel && !schedule && state.status == PlaybackStatus.Playing) {
+    // Remote: which overlay row to put focus on (top controls / bottom zapping buttons), and whether
+    // focus is on the picture itself or inside the overlay.
+    var focusTopTick by remember { mutableIntStateOf(0) }
+    var focusBottomTick by remember { mutableIntStateOf(0) }
+    var pictureFocused by remember { mutableStateOf(true) }
+    var overlayHasFocus by remember { mutableStateOf(false) }
+    var addingToList by remember { mutableStateOf(false) }
+
+    // Auto-hide the overlay after a few seconds without interaction (not while a remote is on its buttons).
+    LaunchedEffect(overlay, interaction, state.status, overlayHasFocus, addingToList) {
+        if (overlay && !panel && !schedule && !overlayHasFocus && !addingToList && state.status == PlaybackStatus.Playing) {
             delay(5_000)
             overlay = false
         }
@@ -244,6 +255,8 @@ private fun PlayerContent(
             else -> overlay = false
         }
     }
+    // When the overlay goes away, give the remote back to the picture.
+    LaunchedEffect(overlay) { if (!overlay && !panel && !schedule) runCatching { focus.requestFocus() } }
 
     fun poke() {
         overlay = true
@@ -257,9 +270,12 @@ private fun PlayerContent(
             .fillMaxSize()
             .background(Color.Black)
             .focusRequester(focus)
+            .onFocusChanged { pictureFocused = it.isFocused }
             .focusable()
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown || panel || schedule) return@onKeyEvent false
+                // Keys pressed while a button in the overlay is focused belong to that button / focus moves.
+                if (!pictureFocused) return@onKeyEvent false
                 // Guide button on TV remotes: today's schedule for this channel.
                 if (event.key.nativeKeyCode == android.view.KeyEvent.KEYCODE_GUIDE) {
                     schedule = true
@@ -272,11 +288,15 @@ private fun PlayerContent(
                     return@onKeyEvent true
                 }
                 when (event.key) {
-                    Key.ChannelUp, Key.DirectionUp -> { controller.next(); poke(); true }
-                    Key.ChannelDown, Key.DirectionDown -> { controller.previous(); poke(); true }
+                    // ◀ ▶ zap, like CH- / CH+.
+                    Key.ChannelUp, Key.DirectionRight -> { controller.next(); poke(); true }
+                    Key.ChannelDown, Key.DirectionLeft -> { controller.previous(); poke(); true }
+                    // ▲ goes to the controls at the top (favorite, add to list, …), ▼ to the zapping buttons.
+                    Key.DirectionUp -> { poke(); focusTopTick++; true }
+                    Key.DirectionDown -> { poke(); focusBottomTick++; true }
                     Key.LastChannel -> { controller.last(); poke(); true }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> { panel = true; true }
-                    Key.DirectionLeft, Key.DirectionRight, Key.Info, Key.Menu -> { poke(); true }
+                    Key.Info, Key.Menu -> { poke(); true }
                     else -> false
                 }
             }
@@ -340,6 +360,10 @@ private fun PlayerContent(
 
         AnimatedVisibility(visible = overlay, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
             Overlay(
+                focusTopTick = focusTopTick,
+                focusBottomTick = focusBottomTick,
+                onFocusInside = { overlayHasFocus = it },
+                onAddToList = { addingToList = true },
                 state = state,
                 isFavorite = isFavorite,
                 resizeLabel = resizeModes[resizeIndex].second,
@@ -390,12 +414,20 @@ private fun PlayerContent(
         }
     }
 
+    if (addingToList) {
+        com.mwalczak.player.ui.common.AddToListDialog(container, state.playing, onDismiss = { addingToList = false })
+    }
+
     // Give key focus back to the player when the panel closes, so the remote keeps zapping.
     LaunchedEffect(panel, schedule) { if (!panel && !schedule) runCatching { focus.requestFocus() } }
 }
 
 @Composable
 private fun Overlay(
+    focusTopTick: Int,
+    focusBottomTick: Int,
+    onFocusInside: (Boolean) -> Unit,
+    onAddToList: () -> Unit,
     state: PlayerUiState,
     isFavorite: Boolean,
     resizeLabel: String,
@@ -410,7 +442,21 @@ private fun Overlay(
     onLast: () -> Unit,
 ) {
     val scrim = Color(0xB3000000)
-    Box(Modifier.fillMaxSize()) {
+    val topFocus = remember { FocusRequester() }
+    val bottomFocus = remember { FocusRequester() }
+    LaunchedEffect(focusTopTick) {
+        if (focusTopTick > 0) {
+            delay(80) // let the overlay appear first
+            runCatching { topFocus.requestFocus() }
+        }
+    }
+    LaunchedEffect(focusBottomTick) {
+        if (focusBottomTick > 0) {
+            delay(80)
+            runCatching { bottomFocus.requestFocus() }
+        }
+    }
+    Box(Modifier.fillMaxSize().onFocusChanged { onFocusInside(it.hasFocus) }) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -420,7 +466,7 @@ private fun Overlay(
                 .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White) }
+            IconButton(onClick = onBack, modifier = Modifier.focusRing()) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White) }
             ChannelLogo(state.playing.icon, Modifier.size(44.dp))
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 Text(
@@ -438,17 +484,20 @@ private fun Overlay(
                     maxLines = 1,
                 )
             }
-            IconButton(onClick = onFavorite) {
+            IconButton(onClick = onFavorite, modifier = Modifier.focusRequester(topFocus).focusRing()) {
                 Icon(
                     if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
                     if (isFavorite) "Remove from favorites" else "Add to favorites",
                     tint = if (isFavorite) MaterialTheme.colorScheme.primary else Color.White,
                 )
             }
-            IconButton(onClick = onResize) { Icon(Icons.Default.AspectRatio, "Aspect: $resizeLabel", tint = Color.White) }
-            castButton()
-            IconButton(onClick = onSchedule) { Icon(Icons.Default.Schedule, "Today's schedule", tint = Color.White) }
-            IconButton(onClick = onList) { Icon(Icons.AutoMirrored.Filled.List, "Channel list", tint = Color.White) }
+            IconButton(onClick = onAddToList, modifier = Modifier.focusRing()) {
+                Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to list", tint = Color.White)
+            }
+            IconButton(onClick = onResize, modifier = Modifier.focusRing()) { Icon(Icons.Default.AspectRatio, "Aspect: $resizeLabel", tint = Color.White) }
+            Box(Modifier.focusRing()) { castButton() }
+            IconButton(onClick = onSchedule, modifier = Modifier.focusRing()) { Icon(Icons.Default.Schedule, "Today's schedule", tint = Color.White) }
+            IconButton(onClick = onList, modifier = Modifier.focusRing()) { Icon(Icons.AutoMirrored.Filled.List, "Channel list", tint = Color.White) }
         }
 
         Column(
@@ -466,17 +515,17 @@ private fun Overlay(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onPrevious, enabled = state.channels.size > 1) {
+                IconButton(onClick = onPrevious, enabled = state.channels.size > 1, modifier = Modifier.focusRequester(bottomFocus).focusRing()) {
                     Icon(Icons.Default.SkipPrevious, "Previous channel", tint = Color.White, modifier = Modifier.size(36.dp))
                 }
                 Spacer(Modifier.width(32.dp))
-                IconButton(onClick = onNext, enabled = state.channels.size > 1) {
+                IconButton(onClick = onNext, enabled = state.channels.size > 1, modifier = Modifier.focusRing()) {
                     Icon(Icons.Default.SkipNext, "Next channel", tint = Color.White, modifier = Modifier.size(36.dp))
                 }
                 Spacer(Modifier.width(32.dp))
                 // "Last channel": flip between this channel and the one watched before.
                 val last = state.previousIndex?.let { state.channels.getOrNull(it) }
-                TextButton(onClick = onLast, enabled = last != null) {
+                TextButton(onClick = onLast, enabled = last != null, modifier = Modifier.focusRing()) {
                     Icon(
                         Icons.Default.SwapHoriz,
                         contentDescription = null,
@@ -521,6 +570,15 @@ private fun NowPlaying(now: EpgEntry, next: EpgEntry?) {
             )
         }
     }
+}
+
+/** A white ring around whichever overlay button the TV remote is on. */
+@Composable
+private fun Modifier.focusRing(): Modifier {
+    var focused by remember { mutableStateOf(false) }
+    return this
+        .onFocusChanged { focused = it.hasFocus }
+        .border(if (focused) 3.dp else 0.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(50))
 }
 
 @Composable

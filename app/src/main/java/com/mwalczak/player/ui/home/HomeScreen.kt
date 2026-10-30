@@ -78,6 +78,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mwalczak.player.AppContainer
+import com.mwalczak.player.CrashReports
+import android.content.Intent
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalContext
 import com.mwalczak.player.data.Catalog
 import com.mwalczak.player.data.CatalogState
 import com.mwalczak.player.data.Channel
@@ -127,6 +131,7 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
             }
             UpdateBanner(container)
+            CrashReportBanner()
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (tab) {
                     Tab.Live -> LiveTab(container, actions, catalogState)
@@ -201,6 +206,37 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
                 }
                 content(Modifier.weight(1f).fillMaxHeight().windowInsetsPadding(ContentInsets))
             }
+        }
+    }
+}
+
+/** After a crash: offer to share what happened, since there's no other way to see it on a device. */
+@Composable
+private fun CrashReportBanner() {
+    val context = LocalContext.current
+    var report by remember { mutableStateOf(CrashReports.read(context)) }
+    val text = report ?: return
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        shape = CardShape,
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("Bunny Player ran into a problem last time.", modifier = Modifier.weight(1f))
+            TextButton(onClick = {
+                val send = Intent(Intent.ACTION_SEND).setType("text/plain")
+                    .putExtra(Intent.EXTRA_SUBJECT, "Bunny Player crash report")
+                    .putExtra(Intent.EXTRA_TEXT, text)
+                context.startActivity(Intent.createChooser(send, "Share crash report"))
+            }) { Text("Share report") }
+            TextButton(onClick = {
+                CrashReports.clear(context)
+                report = null
+            }) { Text("Dismiss") }
         }
     }
 }

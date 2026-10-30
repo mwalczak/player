@@ -38,6 +38,14 @@ class SettingsStore(private val context: Context) {
         val epgEnabled = booleanPreferencesKey("epg_enabled")
         val epgSources = stringPreferencesKey("epg_sources")
         val epgWifiOnly = booleanPreferencesKey("epg_wifi_only")
+        val gridColumns = intPreferencesKey("grid_columns")
+    }
+
+    /** Columns in channel lists on this device; 0 = as many as fit. Not copied to other devices. */
+    val gridColumns: Flow<Int> = context.dataStore.data.map { it[Keys.gridColumns] ?: 0 }
+
+    suspend fun setGridColumns(columns: Int) {
+        context.dataStore.edit { it[Keys.gridColumns] = columns.coerceIn(0, 6) }
     }
 
     /** External XMLTV guide; on by default with the Polish epgshare01 guide. */

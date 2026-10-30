@@ -27,13 +27,14 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   - 🔍 in the guide searches show titles across all channels for the next ~24 h (any word order, accents ignored). Results show when and where each show is on; what's on now comes first. Tap one to watch that channel.
   - Guide data comes from the daily [epgshare01](https://epgshare01.online) XMLTV guides. The app picks the countries found in your channel list automatically (e.g. Poland, US, Canada, UK, Portugal, Spain, Plex…). On a 46k-channel list that covers ~8.4k channels; PPV, event and 24/7 streams have no guide anywhere. US local stations are left out on purpose (57 MB for very few matches).
   - Channels are matched by the provider's own EPG id first, then by name. mybunny's own guide fills gaps, favorites first.
-  - The guide is stored in an on-device database, so even very large channel lists stay fast. It updates once a day, **only on Wi-Fi** by default.
+  - The guide is stored in an on-device database, so even very large channel lists stay fast. For now it downloads **only when you tap Settings → TV guide → Download guide now** (Wi-Fi only by default).
   - Settings → TV guide lets you pick guides by hand, allow mobile data, or add an extra XMLTV URL.
 - **Search** across the whole catalog. Matching ignores case and accents and accepts words in any order ("one bbc" finds "UK: BBC One HD").
 - **Favorites** can be reordered. The order is the zapping and failover order.
 - **My lists**: create, rename, delete and reorder your own lists ("Sports", "News"…) and add channels from search.
 - **Player** (ExoPlayer / Media3):
-  - Switch channels with swipe up/down, the ⏮ ⏭ buttons, or the remote (CH+/CH−, D-pad up/down).
+  - Switch channels with swipe up/down, the ⏮ ⏭ buttons, or the remote (◀ ▶ or CH+/CH−).
+  - On a TV remote, **▲** jumps to the controls at the top (☆ favorite, add to list, aspect, cast, schedule, channel list) and **▼** to the ⏮ ⏭ ⇄ buttons. Move with ◀ ▶, press OK, and Back returns to the picture. A white ring shows the selected button.
   - ⇄ **Last channel** flips between the current channel and the one you watched before. The button shows its name, and the remote's Last key works too.
   - Open the side channel list with the list button or OK on a remote.
   - Shows the current programme ("Now") and the next one from the provider's EPG.
@@ -58,6 +59,8 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   3. If none of those work, it moves to the next channel in the list you're watching. This is why the order of your favorites and lists matters.
 
   A channel also counts as off if it keeps buffering (8 / 15 / 30 s, set in Settings). Each step can be turned off in **Settings → When a channel is off**.
+- **Display**: Settings → *Columns in channel lists* (automatic or 1–4) per device; channel names wrap to two lines.
+- **Crash reports**: if the app crashes (or a background job fails), the next start shows a banner with **Share report**, so the error can be sent and fixed.
 - Settings also cover the stream format (MPEG-TS or HLS) and account info (status, expiry date, connections).
 
 The channel list is cached on the device and refreshes every 12 hours, or when you pull to refresh. Favorites and lists are stored locally in `library.json`.

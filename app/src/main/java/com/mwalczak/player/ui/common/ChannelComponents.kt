@@ -133,7 +133,7 @@ fun ChannelRow(
     ) {
         ChannelLogo(channel.icon, Modifier.size(48.dp))
         Column(Modifier.weight(1f)) {
-            Text(channel.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(channel.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             val onAir = nowOnAir(container, channel)
             val line = listOfNotNull(subtitle, onAir?.title).joinToString("  ·  ")
             if (line.isNotEmpty()) {
@@ -210,8 +210,9 @@ fun ChannelGrid(
     modifier: Modifier = Modifier,
     subtitle: (index: Int, channel: Channel) -> String? = { _, _ -> null },
 ) {
+    val fixed by container.settings.gridColumns.collectAsStateWithLifecycle(0)
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = GRID_MIN_CELL),
+        columns = if (fixed > 0) GridCells.Fixed(fixed) else GridCells.Adaptive(minSize = GRID_MIN_CELL),
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),

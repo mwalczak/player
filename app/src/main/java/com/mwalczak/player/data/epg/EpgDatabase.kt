@@ -18,15 +18,33 @@ import kotlin.concurrent.write
  */
 class EpgDatabase(context: Context) {
 
-    private val file: File = context.getDatabasePath("epg.db").apply { parentFile?.mkdirs() }
+    private val file: File = context.getDatabasePath("epg.db")
     private val lock = ReentrantReadWriteLock()
-    private var db: SQLiteDatabase = openOrCreate(file)
+    /** Opened on first use (off the main thread); null if it can't be opened, which just means "no guide". */
+    private var opened: SQLiteDatabase? = null
+    private var openFailed = false
+
+    private fun database(): SQLiteDatabase? {
+        opened?.let { return it }
+        if (openFailed) return null
+        return runCatching {
+            file.parentFile?.mkdirs()
+            openOrCreate(file)
+        }.onFailure {
+            // A damaged file: start from an empty guide next time.
+            openFailed = true
+            runCatching { SQLiteDatabase.deleteDatabase(file) }
+        }.getOrNull()?.also { opened = it }
+    }
 
     inner class Builder internal constructor() {
-        private val target = File(file.parentFile, "epg-new.db")
+        // Next to the live database. (Must name the outer file explicitly: inside this class `file`
+        // would be the builder's own, not-yet-initialised property.)
+        private val target = File(this@EpgDatabase.file.parentFile, "epg-new.db")
         internal val db: SQLiteDatabase
 
         init {
+            target.parentFile?.mkdirs()
             SQLiteDatabase.deleteDatabase(target)
             db = SQLiteDatabase.openOrCreateDatabase(target, null)
             db.execSQL(CREATE_TABLE)
@@ -72,7 +90,7 @@ class EpgDatabase(context: Context) {
             SQLiteDatabase.deleteDatabase(target)
         }
 
-        internal val file: File get() = target
+        internal val targetFile: File get() = target
     }
 
     fun newBuilder(): Builder = Builder()
@@ -81,10 +99,11 @@ class EpgDatabase(context: Context) {
     fun swapIn(builder: Builder, meta: Map<String, String>) {
         builder.finish(meta)
         lock.write {
-            db.close()
+            runCatching { opened?.close() }
+            opened = null
+            openFailed = false
             SQLiteDatabase.deleteDatabase(file)
-            if (!builder.file.renameTo(file)) throw IllegalStateException("Could not install the new guide")
-            db = openOrCreate(file)
+            if (!builder.targetFile.renameTo(file)) throw IllegalStateException("Could not install the new guide")
         }
     }
 
@@ -132,7 +151,9 @@ class EpgDatabase(context: Context) {
         it.rawQuery("SELECT COUNT(DISTINCT stream_id) FROM programme", null).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
     } ?: 0
 
-    private fun <T> query(block: (SQLiteDatabase) -> T): T? = lock.read { runCatching { block(db) }.getOrNull() }
+    private fun <T> query(block: (SQLiteDatabase) -> T): T? = lock.read {
+        runCatching { database()?.let(block) }.getOrNull()
+    }
 
     private fun openOrCreate(file: File): SQLiteDatabase =
         SQLiteDatabase.openOrCreateDatabase(file, null).apply {

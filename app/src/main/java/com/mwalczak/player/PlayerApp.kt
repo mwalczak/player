@@ -21,6 +21,7 @@ import com.mwalczak.player.data.LibraryStore
 import com.mwalczak.player.data.SettingsStore
 import com.mwalczak.player.data.XtreamClient
 import com.mwalczak.player.update.Updater
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Dispatchers
@@ -39,7 +40,11 @@ data class PlaybackQueue(
 )
 
 class AppContainer(context: Context) {
-    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    /** Background work never takes the app down: failures are recorded for the crash report instead. */
+    val appScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main.immediate +
+            CoroutineExceptionHandler { _, error -> CrashReports.record(context, "Background error (app kept running)", error) },
+    )
 
     val httpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -67,21 +72,7 @@ class AppContainer(context: Context) {
         }
     }.stateIn(appScope, SharingStarted.WhileSubscribed(5_000), System.currentTimeMillis() / 1000)
 
-    init {
-        // Keep the guide in step with the channel list and the guide settings.
-        appScope.launch {
-            combine(catalog.state, settings.epg, settings.credentials) { c, e, creds ->
-                val ready = (c as? CatalogState.Ready)?.takeIf { !it.refreshing }?.catalog
-                Triple(ready, e, creds)
-            }
-                .distinctUntilChanged()
-                .collectLatest { (ready, epgSettings, creds) ->
-                    if (ready == null || creds == null) return@collectLatest
-                    epg.refresh(creds, ready, epgSettings, guidePriority())
-                }
-        }
-    }
-
+    /** Downloads and builds the guide. Only on request (Settings), never automatically for now. */
     suspend fun refreshEpg() {
         val creds = settings.currentCredentials() ?: return
         val current = catalog.catalog ?: return
@@ -101,6 +92,7 @@ class PlayerApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashReports.install(this)
         container = AppContainer(this)
     }
 }

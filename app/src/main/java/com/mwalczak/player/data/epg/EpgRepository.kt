@@ -202,9 +202,18 @@ class EpgRepository(
                     version = it.version + 1,
                 )
             }
-        } catch (e: Exception) {
-            withContext(Dispatchers.IO) { builder.discard() }
-            _state.update { it.copy(loading = false, progress = null, error = e.message ?: "Could not load the guide") }
+        } catch (e: Throwable) {
+            // Including OutOfMemoryError: a failed guide update must never take the app down.
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            runCatching { withContext(Dispatchers.IO) { builder.discard() } }
+            com.mwalczak.player.CrashReports.record(context, "Guide update failed (app kept running)", e)
+            _state.update {
+                it.copy(
+                    loading = false,
+                    progress = null,
+                    error = if (e is OutOfMemoryError) "Not enough memory for all guides – pick fewer in Guides" else e.message ?: "Could not load the guide",
+                )
+            }
         }
     }
 

@@ -155,6 +155,7 @@ fun GuideTab(container: AppContainer, actions: Actions) {
                 searching -> GuideSearchResults(container, catalog.channels, epg.channelsWithGuide, epg.version, query, actions)
                 channels.isEmpty() -> EmptyState("No channels here.")
                 epg.channelsWithGuide == 0 && epg.loading -> EmptyState("Loading the TV guide… ${epg.progress.orEmpty()}")
+                epg.channelsWithGuide == 0 -> EmptyState("No guide yet. Download it in Settings → TV guide → Download guide now.")
                 else -> GuideGrid(container, channels, epg.version, scroll) { index ->
                     actions.play(title, channels, index)
                 }
