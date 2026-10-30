@@ -32,6 +32,8 @@ data class RemoteStatus(
     val title: String? = null,
     val index: Int = -1,
     val count: Int = 0,
+    /** Stream id of the channel on screen; -1 when nothing plays (or an older version). */
+    val streamId: Int = -1,
     val error: String? = null,
 )
 
@@ -45,6 +47,10 @@ sealed interface RemoteCommand {
 }
 
 /** What the local player is showing, published for remote status requests. */
-data class NowPlaying(val channel: String, val title: String, val index: Int, val count: Int)
+data class NowPlaying(val channel: String, val title: String, val index: Int, val count: Int, val streamId: Int)
 
 internal val remoteJson = Json { ignoreUnknownKeys = true; encodeDefaults = false }
+
+/** Whether [channel] is what this status says is on screen (by name for older versions without ids). */
+fun RemoteStatus.isPlaying(channel: Channel): Boolean =
+    playing != null && if (streamId >= 0) streamId == channel.streamId else playing == channel.name

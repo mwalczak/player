@@ -2,6 +2,7 @@ package com.mwalczak.player.cast
 
 import com.mwalczak.player.data.Channel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -63,5 +64,14 @@ class RemoteTest {
         val request = RemoteRequest("login", server = "http://s", username = "u", password = "p")
         val decoded = remoteJson.decodeFromString(RemoteRequest.serializer(), remoteJson.encodeToString(RemoteRequest.serializer(), request))
         assertEquals(Triple("http://s", "u", "p"), Triple(decoded.server, decoded.username, decoded.password))
+    }
+
+    @Test
+    fun `the channel on the TV is found by id, or by name from older versions`() {
+        val tvn = Channel(5, "PL: TVN")
+        assertTrue(RemoteStatus("TV", signedIn = true, playing = "PL: TVN HD", streamId = 5).isPlaying(tvn))
+        assertFalse(RemoteStatus("TV", signedIn = true, playing = "PL: TVN", streamId = 6).isPlaying(tvn))
+        assertTrue(RemoteStatus("TV", signedIn = true, playing = "PL: TVN").isPlaying(tvn))
+        assertFalse(RemoteStatus("TV", signedIn = true).isPlaying(tvn))
     }
 }

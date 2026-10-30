@@ -52,6 +52,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import com.mwalczak.player.cast.isPlaying
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
@@ -114,11 +120,13 @@ fun ChannelRow(
 
     val context = LocalContext.current
     val interaction = remember { MutableInteractionSource() }
+    val onTv = playingOnTv(container, channel)
     Row(
         modifier
             .fillMaxWidth()
             .clip(CardShape)
             .background(MaterialTheme.colorScheme.surfaceContainer)
+            .onTvUnderline(onTv)
             .focusHighlight(interaction)
             .then(if (onFocusChange != null) Modifier.onFocusChanged { onFocusChange(it.hasFocus) } else Modifier)
             .combinedClickable(
@@ -138,7 +146,14 @@ fun ChannelRow(
     ) {
         ChannelLogo(channel.icon, Modifier.size(48.dp))
         Column(Modifier.weight(1f)) {
-            Text(channel.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                channel.name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (onTv) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                fontWeight = if (onTv) FontWeight.SemiBold else null,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
             val onAir = nowOnAir(container, channel)
             val line = listOfNotNull(subtitle, onAir?.title).joinToString("  ·  ")
             if (line.isNotEmpty()) {
@@ -183,6 +198,25 @@ fun ChannelRow(
 }
 
 val CardShape = RoundedCornerShape(12.dp)
+
+/** True while casting and [channel] is what the TV shows. */
+@Composable
+fun playingOnTv(container: AppContainer, channel: Channel): Boolean {
+    val status by container.remote.targetStatus.collectAsStateWithLifecycle()
+    return status?.isPlaying(channel) == true
+}
+
+/** A bar along the bottom edge marking the channel that plays on the TV. */
+@Composable
+fun Modifier.onTvUnderline(on: Boolean): Modifier {
+    if (!on) return this
+    val color = MaterialTheme.colorScheme.primary
+    return drawWithContent {
+        drawContent()
+        val height = 4.dp.toPx()
+        drawRect(color, topLeft = Offset(0f, size.height - height), size = Size(size.width, height))
+    }
+}
 
 /** The programme currently on [channel], from the guide. */
 @Composable

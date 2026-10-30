@@ -14,6 +14,8 @@ import com.mwalczak.player.data.SettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -86,8 +88,40 @@ class RemoteControl(
     private val resolveQueue = ArrayDeque<NsdServiceInfo>()
     private var resolving = false
 
+    private val _targetStatus = MutableStateFlow<RemoteStatus?>(null)
+    /** What the TV being controlled says it shows (null when not casting); refreshed every few seconds. */
+    val targetStatus: StateFlow<RemoteStatus?> = _targetStatus.asStateFlow()
+    private var polling: Job? = null
+
     fun select(device: RemoteDevice?) {
         _target.value = device
+        _targetStatus.value = null
+        poll()
+    }
+
+    /** Asks the TV again shortly, e.g. after next/previous (which it acts on a moment later). */
+    fun refreshSoon() {
+        val device = _target.value ?: return
+        scope.launch {
+            delay(800)
+            status(device)
+        }
+    }
+
+    private fun poll() {
+        polling?.cancel()
+        val device = _target.value ?: return
+        polling = scope.launch {
+            while (true) {
+                status(device)
+                delay(3_000)
+            }
+        }
+    }
+
+    /** Keeps [targetStatus] in step with what [device] answered. */
+    private fun note(device: RemoteDevice, status: RemoteStatus) {
+        if (_target.value == device && status.error == null) _targetStatus.value = status
     }
 
     // ---------------------------------------------------------------------------------------
@@ -100,6 +134,7 @@ class RemoteControl(
         Thread({ serve(socket) }, "remote-receiver").apply { isDaemon = true }.start()
         register(socket.localPort)
         discover()
+        poll()
     }
 
     fun stop() {
@@ -114,6 +149,8 @@ class RemoteControl(
             resolving = false
         }
         _devices.value = emptyList()
+        polling?.cancel()
+        polling = null
     }
 
     // ---------------------------------------------------------------------------------------
@@ -146,7 +183,7 @@ class RemoteControl(
         runCatching {
             http.newCall(Request.Builder().url("${device.baseUrl}/status").build()).execute().use { r ->
                 remoteJson.decodeFromString(RemoteStatus.serializer(), r.body?.string().orEmpty())
-            }
+            }.also { note(device, it) }
         }
     }
 
@@ -157,6 +194,7 @@ class RemoteControl(
             val text = r.body?.string().orEmpty()
             runCatching { remoteJson.decodeFromString(RemoteStatus.serializer(), text) }
                 .getOrElse { throw IOException("HTTP ${r.code}") }
+                .also { note(device, it) }
         }
     }
 
@@ -202,7 +240,13 @@ class RemoteControl(
                 val queue = PlaybackQueue(cmd.title ?: "From phone", cmd.channels, cmd.index.coerceIn(cmd.channels.indices), fromRemote = true)
                 emit(RemoteCommand.Play(queue))
                 val channel = queue.channels[queue.startIndex]
-                return 200 to currentStatus().copy(playing = channel.name, title = queue.title, index = queue.startIndex, count = queue.channels.size)
+                return 200 to currentStatus().copy(
+                    playing = channel.name,
+                    title = queue.title,
+                    index = queue.startIndex,
+                    count = queue.channels.size,
+                    streamId = channel.streamId,
+                )
             }
             "next" -> emit(RemoteCommand.Next)
             "previous" -> emit(RemoteCommand.Previous)
@@ -226,6 +270,7 @@ class RemoteControl(
             title = now?.title,
             index = now?.index ?: -1,
             count = now?.count ?: 0,
+            streamId = now?.streamId ?: -1,
             error = error,
         )
     }

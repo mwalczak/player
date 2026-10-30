@@ -30,7 +30,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,8 +44,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mwalczak.player.AppContainer
 import com.mwalczak.player.cast.RemoteDevice
-import com.mwalczak.player.cast.RemoteStatus
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -127,20 +124,12 @@ fun RemoteBar(container: AppContainer, modifier: Modifier = Modifier) {
     val device = target ?: return
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var status by remember(device) { mutableStateOf<RemoteStatus?>(null) }
-    var refresh by remember { mutableStateOf(0) }
-
-    LaunchedEffect(device, refresh) {
-        while (true) {
-            container.remote.status(device).onSuccess { status = it }
-            delay(3_000)
-        }
-    }
+    val status by container.remote.targetStatus.collectAsStateWithLifecycle()
 
     fun send(type: String) {
         scope.launch {
             container.remote.command(device, type)
-                .onSuccess { refresh++ }
+                .onSuccess { container.remote.refreshSoon() }
                 .onFailure { Toast.makeText(context, "${device.name}: ${it.message}", Toast.LENGTH_SHORT).show() }
         }
     }

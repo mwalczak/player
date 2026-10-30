@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -60,6 +61,8 @@ import com.mwalczak.player.ui.common.previewEnabled
 import androidx.compose.ui.focus.onFocusChanged
 import com.mwalczak.player.ui.common.EmptyState
 import com.mwalczak.player.ui.common.focusHighlight
+import com.mwalczak.player.ui.common.onTvUnderline
+import com.mwalczak.player.ui.common.playingOnTv
 import com.mwalczak.player.ui.common.focusMemory
 import com.mwalczak.player.ui.common.rememberFocusMemory
 import com.mwalczak.player.ui.common.requestFocusSoon
@@ -98,6 +101,7 @@ import com.mwalczak.player.ui.common.CardShape
 import com.mwalczak.player.ui.common.progress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 
@@ -129,8 +133,13 @@ fun GuideTab(container: AppContainer, actions: Actions) {
                 add(ALL to "All channels")
             }
         }
-        var source by rememberSaveable { mutableStateOf(sources.first().first) }
-        if (sources.none { it.first == source }) source = sources.first().first
+        // The chosen category is kept on the device, so it's still chosen after the phone was locked
+        // (Android may close the app meanwhile). Until the saved one is known, nothing is shown.
+        var chosen by rememberSaveable { mutableStateOf<String?>(null) }
+        LaunchedEffect(Unit) { if (chosen == null) chosen = container.settings.guideSource.first().orEmpty() }
+        if (chosen == null) return@WithCatalog
+        // A category missing for a moment (e.g. while channels reload) doesn't lose the choice.
+        val source = chosen?.takeIf { id -> sources.any { it.first == id } } ?: sources.first().first
         val title = sources.first { it.first == source }.second
         val channels = remember(source, catalog, library.favorites) { channelsFor(source, catalog, library.favorites) }
 
@@ -163,7 +172,14 @@ fun GuideTab(container: AppContainer, actions: Actions) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         items(sources, key = { it.first }) { (id, name) ->
-                            FilterChip(selected = id == source, onClick = { source = id }, label = { Text(name) })
+                            FilterChip(
+                                selected = id == source,
+                                onClick = {
+                                    chosen = id
+                                    scope.launch { container.settings.setGuideSource(id) }
+                                },
+                                label = { Text(name) },
+                            )
                         }
                     }
                     IconButton(onClick = { searching = true }) { Icon(Icons.Default.Search, "Search shows") }
@@ -299,7 +315,7 @@ private fun GuideGrid(
                                 }
                             },
                     ) {
-                        ChannelCell(channel) { onPlay(index) }
+                        ChannelCell(container, channel) { onPlay(index) }
                         Row(
                             Modifier
                                 .horizontalScroll(scroll)
@@ -365,8 +381,9 @@ private val GuideScrollSpec = object : BringIntoViewSpec {
 }
 
 @Composable
-private fun ChannelCell(channel: Channel, onClick: () -> Unit) {
+private fun ChannelCell(container: AppContainer, channel: Channel, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
+    val onTv = playingOnTv(container, channel)
     Row(
         Modifier
             .width(ChannelColumn)
@@ -374,6 +391,7 @@ private fun ChannelCell(channel: Channel, onClick: () -> Unit) {
             .padding(horizontal = 4.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .onTvUnderline(onTv)
             .focusHighlight(interaction, RoundedCornerShape(8.dp))
             .clickable(interactionSource = interaction, indication = LocalIndication.current, onClick = onClick)
             .padding(horizontal = 6.dp),
@@ -381,7 +399,14 @@ private fun ChannelCell(channel: Channel, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         ChannelLogo(channel.icon, Modifier.size(36.dp))
-        Text(channel.name, style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(
+            channel.name,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (onTv) MaterialTheme.colorScheme.primary else Color.Unspecified,
+            fontWeight = if (onTv) FontWeight.Bold else null,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

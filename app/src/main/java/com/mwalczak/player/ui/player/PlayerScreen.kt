@@ -216,7 +216,7 @@ private fun PlayerContent(
         }
     }
     LaunchedEffect(state.playing, state.index) {
-        container.remote.nowPlaying.value = NowPlaying(state.playing.name, state.queueTitle, state.index, state.channels.size)
+        container.remote.nowPlaying.value = NowPlaying(state.playing.name, state.queueTitle, state.index, state.channels.size, state.playing.streamId)
     }
     FullscreenLandscape()
 

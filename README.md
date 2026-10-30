@@ -42,6 +42,7 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   - Aspect modes: Fit, Zoom, Stretch. You can also favorite the channel you're watching.
 - **Cast to TV over Wi-Fi** (phone as remote): open Bunny Player on the TV, then on the phone tap 📺 (top of the side rail, or in the player) and pick the TV.
   - Any channel you tap on the phone now plays on the TV, and a bar shows what's on with ⏮ ⏭ ■ controls.
+  - The channel playing on the TV is underlined in orange in channel lists and in the guide.
   - Casting from the player hands over the channel you're watching.
   - If the TV app isn't signed in, the phone signs it in with the same login, and the TV gets favorites, lists and settings through sync.
   - Devices find each other with mDNS (`_bunnyplayer._tcp`) and talk over plain HTTP on the local network. The TV uses its own player, so `.ts` streams and failover work exactly as they do on the TV. This avoids Chromecast, whose receiver can't play raw `.ts` and needs CORS headers that IPTV servers don't send.
