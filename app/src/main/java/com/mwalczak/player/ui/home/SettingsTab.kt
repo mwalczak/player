@@ -30,6 +30,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mwalczak.player.AppContainer
 import com.mwalczak.player.data.AccountInfo
 import com.mwalczak.player.data.CatalogState
+import com.mwalczak.player.data.Backup
+import com.mwalczak.player.data.Backups
+import com.mwalczak.player.data.Credentials
+import com.mwalczak.player.data.applySyncPayload
+import com.mwalczak.player.ui.common.ExportDialog
+import com.mwalczak.player.ui.common.rememberImportPicker
+import com.mwalczak.player.ui.common.summary
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.Checkbox
 import com.mwalczak.player.cast.RemoteDevice
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
@@ -78,6 +89,21 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
     val epgSettings by container.settings.epg.collectAsStateWithLifecycle(EpgSettings())
     var editingEpgUrl by remember { mutableStateOf(false) }
     var copyingToTv by remember { mutableStateOf(false) }
+    val importContext = LocalContext.current
+    var exporting by remember { mutableStateOf(false) }
+    var importing by remember { mutableStateOf<Backup?>(null) }
+    val pickImport = rememberImportPicker { importing = it }
+
+    if (exporting) ExportDialog(container, onDismiss = { exporting = false })
+    importing?.let { backup ->
+        ImportDialog(backup, onDismiss = { importing = null }) { replace, useLogin ->
+            importing = null
+            scope.launch {
+                importBackup(container, backup, replace, useLogin)
+                Toast.makeText(importContext, if (replace) "Settings replaced from file" else "Added to your favorites and lists", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
     val context = LocalContext.current
 
     if (copyingToTv) {
@@ -207,6 +233,20 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             modifier = Modifier.clickable { copyingToTv = true },
         )
 
+        SectionHeader(startPadding = 16.dp, text = "Backup & sharing")
+        ListItem(
+            headlineContent = { Text("Export favorites & settings") },
+            supportingContent = { Text("Share a file with a friend or keep it as a backup – login optional") },
+            leadingContent = { Icon(Icons.Default.Share, null) },
+            modifier = Modifier.clickable { exporting = true },
+        )
+        ListItem(
+            headlineContent = { Text("Import from file") },
+            supportingContent = { Text("Add favorites and lists from a Bunny Player settings file") },
+            leadingContent = { Icon(Icons.Default.FileOpen, null) },
+            modifier = Modifier.clickable { pickImport() },
+        )
+
         SectionHeader(startPadding = 16.dp, text = "App")
         ListItem(
             headlineContent = { Text("Version ${BuildConfig.VERSION_NAME}") },
@@ -303,4 +343,52 @@ private fun CopyToTvDialog(container: AppContainer, onDismiss: () -> Unit, onCop
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
     )
+}
+
+@Composable
+private fun ImportDialog(backup: Backup, onDismiss: () -> Unit, onImport: (replace: Boolean, useLogin: Boolean) -> Unit) {
+    var useLogin by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Import settings") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("This file has ${backup.summary()}.")
+                Text(
+                    "Add to mine keeps everything you have and adds what's new. Replace mine also takes its settings.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                backup.login?.let { login ->
+                    Row(Modifier.fillMaxWidth().clickable { useLogin = !useLogin }, verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = useLogin, onCheckedChange = { useLogin = it })
+                        Text("Also switch to its login (${login.username})")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row {
+                TextButton(onClick = { onImport(false, useLogin) }) { Text("Add to mine") }
+                TextButton(onClick = { onImport(true, useLogin) }) { Text("Replace mine") }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** Applies a backup: login (optional), then favorites/lists merged or replaced, matched to our channels. */
+internal suspend fun importBackup(container: AppContainer, backup: Backup, replace: Boolean, useLogin: Boolean) {
+    val login = backup.login?.takeIf { useLogin }
+    if (login != null) {
+        val creds = Credentials(login.server, login.username, login.password)
+        container.settings.saveCredentials(creds)
+        container.catalog.load(creds, force = true)
+    }
+    val library = Backups.remap(backup.data.library, container.catalog.catalog?.channels)
+    if (replace) {
+        applySyncPayload(container.settings, container.library, backup.data.copy(library = library))
+    } else {
+        container.library.replaceAll(Backups.merge(container.library.library.value, library))
+    }
 }

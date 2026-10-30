@@ -1,0 +1,111 @@
+package com.mwalczak.player.data
+
+import com.mwalczak.player.cast.SyncPayload
+import kotlinx.coroutines.flow.first
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+
+/** Login inside a backup file; only present when the user explicitly chose to include it. */
+@Serializable
+data class BackupLogin(val server: String, val username: String, val password: String)
+
+/** The export / import file: favorites, lists, pinned categories and settings. */
+@Serializable
+data class Backup(
+    val app: String = APP_ID,
+    val version: Int = 1,
+    val exportedAtMillis: Long = 0,
+    val data: SyncPayload,
+    val login: BackupLogin? = null,
+) {
+    companion object {
+        const val APP_ID = "bunny-player"
+    }
+}
+
+object Backups {
+    private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true }
+
+    fun encode(backup: Backup): String = json.encodeToString(Backup.serializer(), backup)
+
+    /** Parses a backup file, rejecting anything that isn't one of ours. */
+    fun decode(text: String): Backup {
+        val backup = runCatching { json.decodeFromString(Backup.serializer(), text) }
+            .getOrElse { throw IllegalArgumentException("This isn't a Bunny Player settings file.") }
+        require(backup.app == Backup.APP_ID) { "This isn't a Bunny Player settings file." }
+        return backup
+    }
+
+    /**
+     * Points imported channels at this account's catalog: same stream id if it exists, otherwise
+     * the channel with the same name (another provider numbers its streams differently).
+     * Channels that can't be found are kept as they are.
+     */
+    fun remap(library: Library, catalog: List<Channel>?): Library {
+        if (catalog.isNullOrEmpty()) return library
+        val byId = catalog.associateBy { it.streamId }
+        val byName = catalog.groupBy { ChannelMatcher.searchKey(it.name.trim()) }.mapValues { it.value.first() }
+        fun fix(ch: Channel) = byId[ch.streamId]?.takeIf { sameName(it, ch) }
+            ?: byName[ChannelMatcher.searchKey(ch.name.trim())]
+            ?: byId[ch.streamId]
+            ?: ch
+        return library.copy(
+            favorites = library.favorites.map(::fix).distinctBy { it.streamId },
+            lists = library.lists.map { list -> list.copy(channels = list.channels.map(::fix).distinctBy { it.streamId }) },
+        )
+    }
+
+    /** Adds [imported] favorites, lists and pinned categories to [mine] without duplicates. */
+    fun merge(mine: Library, imported: Library): Library {
+        val favoriteIds = mine.favorites.map { it.streamId }.toSet()
+        val lists = mine.lists.toMutableList()
+        imported.lists.forEach { incoming ->
+            val index = lists.indexOfFirst { it.name.equals(incoming.name, ignoreCase = true) }
+            if (index >= 0) {
+                val existing = lists[index]
+                val ids = existing.channels.map { it.streamId }.toSet()
+                lists[index] = existing.copy(channels = existing.channels + incoming.channels.filter { it.streamId !in ids })
+            } else {
+                // Fresh id so it can never collide with one of ours.
+                lists += incoming.copy(id = java.util.UUID.randomUUID().toString())
+            }
+        }
+        return mine.copy(
+            favorites = mine.favorites + imported.favorites.filter { it.streamId !in favoriteIds },
+            lists = lists,
+            pinnedCategories = (mine.pinnedCategories + imported.pinnedCategories).distinct(),
+        )
+    }
+
+    private fun sameName(a: Channel, b: Channel) =
+        ChannelMatcher.searchKey(a.name.trim()) == ChannelMatcher.searchKey(b.name.trim())
+}
+
+/** This device's favorites, lists and settings (without "recently watched"). */
+suspend fun currentSyncPayload(settings: SettingsStore, library: LibraryStore): SyncPayload {
+    val playback = settings.playback.first()
+    val epg = settings.epg.first()
+    return SyncPayload(
+        library = library.library.value.copy(recent = emptyList()),
+        format = playback.format.name,
+        tryAlternates = playback.tryAlternates,
+        nextInList = playback.nextInList,
+        stallTimeoutSec = playback.stallTimeoutSec,
+        epgEnabled = epg.enabled,
+        epgUrl = epg.url,
+    )
+}
+
+/** Replaces favorites, lists, pinned categories and settings with [payload]; keeps "recently watched". */
+suspend fun applySyncPayload(settings: SettingsStore, library: LibraryStore, payload: SyncPayload) {
+    library.replaceAll(payload.library.copy(recent = library.library.value.recent))
+    settings.updatePlayback {
+        PlaybackSettings(
+            format = runCatching { StreamFormat.valueOf(payload.format) }.getOrDefault(it.format),
+            tryAlternates = payload.tryAlternates,
+            nextInList = payload.nextInList,
+            stallTimeoutSec = payload.stallTimeoutSec,
+        )
+    }
+    settings.updateEpg(EpgSettings(payload.epgEnabled, payload.epgUrl))
+}

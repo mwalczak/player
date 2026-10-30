@@ -8,10 +8,9 @@ import android.provider.Settings
 import com.mwalczak.player.PlaybackQueue
 import com.mwalczak.player.data.CatalogRepository
 import com.mwalczak.player.data.Credentials
-import com.mwalczak.player.data.EpgSettings
+import com.mwalczak.player.data.applySyncPayload
+import com.mwalczak.player.data.currentSyncPayload
 import com.mwalczak.player.data.LibraryStore
-import com.mwalczak.player.data.PlaybackSettings
-import com.mwalczak.player.data.StreamFormat
 import kotlinx.coroutines.flow.first
 import com.mwalczak.player.data.SettingsStore
 import kotlinx.coroutines.CoroutineScope
@@ -144,17 +143,7 @@ class RemoteControl(
     suspend fun syncTo(device: RemoteDevice): Result<RemoteStatus> = withContext(Dispatchers.IO) {
         runCatching {
             val creds = settings.currentCredentials() ?: throw IOException("Sign in on this device first")
-            val playback = settings.playback.first()
-            val epg = settings.epg.first()
-            val payload = SyncPayload(
-                library = library.library.value.copy(recent = emptyList()),
-                format = playback.format.name,
-                tryAlternates = playback.tryAlternates,
-                nextInList = playback.nextInList,
-                stallTimeoutSec = playback.stallTimeoutSec,
-                epgEnabled = epg.enabled,
-                epgUrl = epg.url,
-            )
+            val payload = currentSyncPayload(settings, library)
             val status = send(
                 device,
                 RemoteRequest("sync", server = creds.server, username = creds.username, password = creds.password, sync = payload),
@@ -232,17 +221,7 @@ class RemoteControl(
                             scope.launch { catalog.load(creds, force = true) }
                         }
                     }
-                    // Keep this device's own "recently watched".
-                    library.replaceAll(payload.library.copy(recent = library.library.value.recent))
-                    settings.updatePlayback {
-                        PlaybackSettings(
-                            format = runCatching { StreamFormat.valueOf(payload.format) }.getOrDefault(it.format),
-                            tryAlternates = payload.tryAlternates,
-                            nextInList = payload.nextInList,
-                            stallTimeoutSec = payload.stallTimeoutSec,
-                        )
-                    }
-                    settings.updateEpg(EpgSettings(payload.epgEnabled, payload.epgUrl))
+                    applySyncPayload(settings, library, payload)
                 }
                 emit(RemoteCommand.Synced)
             }

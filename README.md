@@ -41,6 +41,11 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   - If the TV app isn't signed in, the phone signs it in with your account.
   - Devices find each other with mDNS (`_bunnyplayer._tcp`) and talk over plain HTTP on the local network. The TV uses its own player, so `.ts` streams and failover work exactly as they do on the TV. This avoids Chromecast, whose receiver can't play raw `.ts` and needs CORS headers that IPTV servers don't send.
 - **Copy to TV**: Settings → *Copy favorites & settings to TV* sends your favorites (in order), lists, pinned categories, playback and guide settings and login to the TV app over Wi-Fi, so you don't set everything up twice. Open Bunny Player on the TV first.
+- **Export / import**: Settings → *Export favorites & settings* creates a file and opens the share sheet (WhatsApp, e-mail, Drive…).
+  - Tick *Include login* to also share the server, username and password.
+  - On a fresh install, the login page has **Import settings file**: pick the file and the app signs in and applies everything.
+  - In Settings, *Import from file* can either add to your own favorites and lists or replace them.
+  - Channels are matched by id, or by name when the importer's provider numbers them differently.
 - **Automatic failover when a channel is off**:
   1. The same stream is retried once.
   2. The app tries other feeds of the same channel from the catalog. For example, if `US: ESPN HD` is down it plays `ESPN FHD` or `ESPN ᴴᴰ (Backup)`.
