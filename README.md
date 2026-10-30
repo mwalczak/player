@@ -24,6 +24,7 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   - Every channel row shows what's on now, with a progress bar.
   - The player shows Now/Next, and 🕒 (or the remote's Guide button) lists the rest of today.
   - The **TV guide** tab is a grid with channels down the side, time across the top and a line at "now". Pick Favorites or a category, and tap a programme to watch.
+  - 🔍 in the guide searches show titles across all channels for the next ~24 h (any word order, accents ignored). Results show when and where each show is on; what's on now comes first. Tap one to watch that channel.
   - Guide data comes from an external XMLTV guide, by default the daily [epgshare01](https://epgshare01.online) Polish guide (about 9 MB). It's matched to your channels by name, and mybunny's own guide fills the gaps.
   - The source URL can be changed in Settings → TV guide.
 - **Search** across the whole catalog. Matching ignores case and accents and accepts words in any order ("one bbc" finds "UK: BBC One HD").

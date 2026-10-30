@@ -60,6 +60,27 @@ import com.mwalczak.player.ui.home.WithCatalog
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
+import com.mwalczak.player.data.epg.GuideHit
+import com.mwalczak.player.data.epg.GuideSearch
+import com.mwalczak.player.ui.common.CardShape
+import com.mwalczak.player.ui.common.progress
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import java.util.Calendar
 
 private const val FAVORITES = "__favorites__"
 private const val ALL = "__all__"
@@ -96,21 +117,42 @@ fun GuideTab(container: AppContainer, actions: Actions) {
 
         val scroll = rememberScrollState()
         val scope = rememberCoroutineScope()
+        var searching by rememberSaveable { mutableStateOf(false) }
+        var query by rememberSaveable { mutableStateOf("") }
 
         Column(Modifier.fillMaxSize()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                LazyRow(
-                    Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(sources, key = { it.first }) { (id, name) ->
-                        FilterChip(selected = id == source, onClick = { source = id }, label = { Text(name) })
-                    }
+            if (searching) {
+                val focus = remember { FocusRequester() }
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = { Text("Search shows, e.g. “mecz” or “fakty”") },
+                        leadingIcon = { Icon(Icons.Default.Search, null) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        modifier = Modifier.weight(1f).widthIn(max = 640.dp).focusRequester(focus),
+                    )
+                    IconButton(onClick = { searching = false; query = "" }) { Icon(Icons.Default.Close, "Close search") }
                 }
-                TextButton(onClick = { scope.launch { scroll.animateScrollTo(0) } }) { Text("Now") }
+                LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LazyRow(
+                        Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(sources, key = { it.first }) { (id, name) ->
+                            FilterChip(selected = id == source, onClick = { source = id }, label = { Text(name) })
+                        }
+                    }
+                    IconButton(onClick = { searching = true }) { Icon(Icons.Default.Search, "Search shows") }
+                    TextButton(onClick = { scope.launch { scroll.animateScrollTo(0) } }) { Text("Now") }
+                }
             }
             when {
+                searching -> GuideSearchResults(container, catalog.channels, epg.programmes, query, actions)
                 channels.isEmpty() -> EmptyState("No channels here.")
                 epg.programmes.isEmpty() && epg.loading -> EmptyState("Loading the TV guide…")
                 else -> GuideGrid(container, channels, epg.programmes, scroll) { index ->
@@ -276,3 +318,93 @@ private fun GuideCell(width: Dp, title: String, time: String?, onAir: Boolean, d
 }
 
 private fun widthOf(seconds: Long): Dp = PerMinute * (seconds / 60f)
+
+@Composable
+private fun GuideSearchResults(
+    container: AppContainer,
+    channels: List<Channel>,
+    programmes: Map<Int, List<Programme>>,
+    query: String,
+    actions: Actions,
+) {
+    var hits by remember { mutableStateOf<List<GuideHit>>(emptyList()) }
+    LaunchedEffect(query, programmes) {
+        delay(200)
+        hits = withContext(Dispatchers.Default) {
+            GuideSearch.search(programmes, channels, query, System.currentTimeMillis() / 1000)
+        }
+    }
+    val now by container.clock.collectAsStateWithLifecycle()
+    val time = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
+
+    when {
+        query.isBlank() -> EmptyState("Type the name of a show to find when and where it's on.")
+        programmes.isEmpty() -> EmptyState("The TV guide isn't loaded yet.")
+        hits.isEmpty() -> EmptyState("Nothing called “$query” in the next 24 hours.")
+        else -> {
+            // Playing a result zaps through the channels of all results.
+            val queue = hits.map { it.channel }.distinctBy { it.streamId }
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(hits, key = { "${it.channel.streamId}-${it.programme.start}" }) { hit ->
+                    val onAir = hit.programme.start <= now && now < hit.programme.stop
+                    val interaction = remember { MutableInteractionSource() }
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(CardShape)
+                            .background(if (onAir) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer)
+                            .focusHighlight(interaction)
+                            .clickable(interactionSource = interaction, indication = LocalIndication.current) {
+                                actions.play("Search: $query", queue, queue.indexOfFirst { it.streamId == hit.channel.streamId })
+                            }
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            whenLabel(hit.programme, now, time),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (onAir) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.width(110.dp),
+                        )
+                        ChannelLogo(hit.channel.icon, Modifier.size(40.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(hit.programme.title, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                hit.channel.name,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (onAir) {
+                                LinearProgressIndicator(
+                                    progress = { hit.programme.progress(now) },
+                                    modifier = Modifier.padding(top = 4.dp).fillMaxWidth().height(2.dp),
+                                    drawStopIndicator = {},
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** "Now · until 21:00", "20:15", "Tomorrow 08:00" or a date for later days. */
+private fun whenLabel(p: Programme, nowSec: Long, time: DateFormat): String {
+    if (p.start <= nowSec) return "Now · until ${time.format(Date(p.stop * 1000))}"
+    val days = dayNumber(p.start) - dayNumber(nowSec)
+    val at = time.format(Date(p.start * 1000))
+    return when (days) {
+        0L -> at
+        1L -> "Tomorrow $at"
+        else -> "${DateFormat.getDateInstance(DateFormat.SHORT).format(Date(p.start * 1000))} $at"
+    }
+}
+
+private fun dayNumber(epochSec: Long): Long {
+    val cal = Calendar.getInstance().apply { timeInMillis = epochSec * 1000 }
+    return cal.get(Calendar.YEAR) * 1000L + cal.get(Calendar.DAY_OF_YEAR)
+}
