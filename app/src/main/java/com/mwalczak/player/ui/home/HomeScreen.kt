@@ -242,7 +242,7 @@ private fun CrashReportBanner() {
 }
 
 @Composable
-private fun UpdateBanner(container: AppContainer) {
+internal fun UpdateBanner(container: AppContainer) {
     val state by container.updater.state.collectAsStateWithLifecycle()
     if (!state.available && state.message == null) return
     val activity = LocalActivity.current

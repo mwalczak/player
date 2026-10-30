@@ -205,6 +205,11 @@ fun LoginScreen(container: AppContainer, onLoggedIn: () -> Unit) {
                 Icon(Icons.Default.FileOpen, contentDescription = null)
                 Text("  Import settings file")
             }
+            Text(
+                "Version ${com.mwalczak.player.BuildConfig.VERSION_NAME}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 
@@ -215,6 +220,10 @@ fun LoginScreen(container: AppContainer, onLoggedIn: () -> Unit) {
             .imePadding(),
         contentAlignment = Alignment.Center,
     ) {
+        // An old install must be able to update itself before signing in, too.
+        Box(Modifier.align(Alignment.TopCenter).widthIn(max = 640.dp)) {
+            com.mwalczak.player.ui.home.UpdateBanner(container)
+        }
         if (maxWidth >= 600.dp) {
             // Landscape phone / tablet / TV: intro on the left, form on the right.
             Row(

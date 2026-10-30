@@ -74,6 +74,18 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -189,6 +201,7 @@ private fun channelsFor(source: String, catalog: Catalog, favorites: List<Channe
     else -> catalog.channelsIn(source)
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun GuideGrid(
     container: AppContainer,
@@ -209,6 +222,32 @@ private fun GuideGrid(
     val timeFormat = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
     val density = LocalDensity.current
 
+    // Remote navigation keeps a time cursor: ▲/▼ go to whatever is on at that time in the row
+    // above/below (not to whichever cell happens to be nearest on screen), ◀/▶ move it along.
+    var cursorSec by remember { mutableLongStateOf(maxOf(System.currentTimeMillis() / 1000, windowStart)) }
+    var movingVertically by remember { mutableStateOf(false) }
+    val requesters = remember { HashMap<Int, FocusRequester>() }
+    fun requester(i: Int) = requesters.getOrPut(i) { FocusRequester() }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    fun visibleStartSec(): Long = windowStart + (with(density) { scroll.value.toDp() } / PerMinute * 60).toLong()
+    fun moveTo(target: Int) {
+        if (target !in channels.indices) return
+        scope.launch {
+            if (listState.layoutInfo.visibleItemsInfo.none { it.index == target }) {
+                listState.scrollToItem(target)
+                withFrameNanos { }
+            }
+            movingVertically = true
+            runCatching { requester(target).requestFocus() }
+            withFrameNanos { }
+            movingVertically = false
+        }
+    }
+
+    // Only scroll as much as needed: a long programme that is already partly on screen stays put
+    // instead of the whole timeline jumping to its far end.
+    CompositionLocalProvider(LocalBringIntoViewSpec provides GuideScrollSpec) {
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             // Time ruler
@@ -229,7 +268,7 @@ private fun GuideGrid(
                     }
                 }
             }
-            LazyColumn(Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.fillMaxSize(), state = listState) {
                 itemsIndexed(channels, key = { _, c -> c.streamId }) { index, channel ->
                     Row(
                         Modifier
@@ -246,12 +285,28 @@ private fun GuideGrid(
                             },
                     ) {
                         ChannelCell(channel) { onPlay(index) }
-                        Row(Modifier.horizontalScroll(scroll)) {
+                        Row(
+                            Modifier
+                                .horizontalScroll(scroll)
+                                .onPreviewKeyEvent { e ->
+                                    if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                    when (e.key) {
+                                        Key.DirectionDown -> { moveTo(index + 1); true }
+                                        Key.DirectionUp -> if (index == 0) false else { moveTo(index - 1); true }
+                                        else -> false
+                                    }
+                                },
+                        ) {
                             // Each row reads its own channel from the guide database as it scrolls into view.
                             val programmes by produceState(emptyList<Programme>(), channel.streamId, version) {
                                 value = container.epg.programmesFor(channel.streamId, windowStart, windowEnd)
                             }
-                            ProgrammeCells(programmes, windowStart, windowEnd, now, timeFormat) {
+                            ProgrammeCells(
+                                programmes, windowStart, windowEnd, now, timeFormat,
+                                cursorSec = cursorSec,
+                                cursorRequester = requester(index),
+                                onCellFocused = { cellStart -> if (!movingVertically) cursorSec = maxOf(cellStart, visibleStartSec()) },
+                            ) {
                                 onPlay(index)
                             }
                         }
@@ -269,6 +324,21 @@ private fun GuideGrid(
                     .fillMaxHeight()
                     .background(MaterialTheme.colorScheme.primary),
             )
+        }
+    }
+    }
+}
+
+/** Minimal scrolling; never jumps for an item that is larger than the view and already partly visible. */
+@OptIn(ExperimentalFoundationApi::class)
+private val GuideScrollSpec = object : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        val end = offset + size
+        return when {
+            offset >= 0 && end <= containerSize -> 0f
+            size > containerSize -> if (end > 0 && offset < containerSize) 0f else offset
+            offset < 0 -> offset
+            else -> end - containerSize
         }
     }
 }
@@ -301,25 +371,40 @@ private fun ProgrammeCells(
     windowEnd: Long,
     now: Long,
     timeFormat: DateFormat,
+    cursorSec: Long,
+    cursorRequester: FocusRequester,
+    onCellFocused: (startSec: Long) -> Unit,
     onClick: () -> Unit,
 ) {
     val visible = programmes.filter { it.stop > windowStart && it.start < windowEnd }
     if (visible.isEmpty()) {
-        GuideCell(widthOf(windowEnd - windowStart), "No guide data", null, onAir = false, dim = true, onClick = onClick)
+        GuideCell(
+            widthOf(windowEnd - windowStart), "No guide data", null, onAir = false, dim = true,
+            modifier = Modifier.focusRequester(cursorRequester),
+            onFocused = {},
+            onClick = onClick,
+        )
         return
     }
+    // The cell ▲/▼ land on: the one on at the cursor time, else the next one, else the last.
+    val target = visible.firstOrNull { it.start <= cursorSec && cursorSec < it.stop }
+        ?: visible.firstOrNull { it.start > cursorSec }
+        ?: visible.last()
     var cursor = windowStart
     visible.forEach { p ->
         val start = maxOf(p.start, cursor)
         val stop = minOf(p.stop, windowEnd)
         if (start > cursor) Spacer(Modifier.width(widthOf(start - cursor)))
         if (stop > start) {
+            val cellStart = start
             GuideCell(
                 widthOf(stop - start),
                 p.title,
                 "${timeFormat.format(Date(p.start * 1000))} – ${timeFormat.format(Date(p.stop * 1000))}",
                 onAir = p.start <= now && now < p.stop,
                 dim = p.stop <= now,
+                modifier = if (p === target) Modifier.focusRequester(cursorRequester) else Modifier,
+                onFocused = { onCellFocused(cellStart) },
                 onClick = onClick,
             )
             cursor = stop
@@ -329,11 +414,21 @@ private fun ProgrammeCells(
 }
 
 @Composable
-private fun GuideCell(width: Dp, title: String, time: String?, onAir: Boolean, dim: Boolean, onClick: () -> Unit) {
+private fun GuideCell(
+    width: Dp,
+    title: String,
+    time: String?,
+    onAir: Boolean,
+    dim: Boolean,
+    modifier: Modifier = Modifier,
+    onFocused: () -> Unit,
+    onClick: () -> Unit,
+) {
     val interaction = remember { MutableInteractionSource() }
     val shape = RoundedCornerShape(6.dp)
     Column(
-        Modifier
+        modifier
+            .onFocusChanged { if (it.isFocused) onFocused() }
             .width(width)
             .fillMaxHeight()
             .padding(horizontal = 1.dp)
