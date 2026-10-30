@@ -18,6 +18,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        // Advertise this device and look for others (phone -> TV remote) while the app is open.
+        appContainer.remote.start()
+    }
+
+    override fun onStop() {
+        appContainer.remote.stop()
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         appContainer.updater.check()

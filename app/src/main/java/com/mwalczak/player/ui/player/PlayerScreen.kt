@@ -92,6 +92,10 @@ import com.mwalczak.player.data.Credentials
 import com.mwalczak.player.data.EpgEntry
 import com.mwalczak.player.data.PlaybackSettings
 import com.mwalczak.player.ui.common.ChannelLogo
+import com.mwalczak.player.ui.common.CastButton
+import com.mwalczak.player.cast.NowPlaying
+import com.mwalczak.player.cast.RemoteCommand
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import java.text.DateFormat
 import java.util.Date
@@ -146,7 +150,27 @@ private fun PlayerContent(
         }
     }
 
-    DisposableEffect(Unit) { onDispose { controller.release() } }
+    DisposableEffect(Unit) {
+        onDispose {
+            container.remote.nowPlaying.value = null
+            controller.release()
+        }
+    }
+
+    // Remote control from a phone, when this device is the TV.
+    LaunchedEffect(Unit) {
+        container.remote.commands.collect { command ->
+            when (command) {
+                RemoteCommand.Next -> controller.next()
+                RemoteCommand.Previous -> controller.previous()
+                RemoteCommand.Stop -> onExit()
+                is RemoteCommand.Play -> Unit // handled by navigation
+            }
+        }
+    }
+    LaunchedEffect(state.playing, state.index) {
+        container.remote.nowPlaying.value = NowPlaying(state.playing.name, state.queueTitle, state.index, state.channels.size)
+    }
     FullscreenLandscape()
 
     // Pause in the background; jump back to the live edge on return.
@@ -272,6 +296,19 @@ private fun PlayerContent(
                 onFavorite = { container.library.toggleFavorite(state.playing); poke() },
                 onResize = { resizeIndex = (resizeIndex + 1) % resizeModes.size; poke() },
                 onList = { panel = true },
+                castButton = {
+                    // Hand the channel being watched over to the TV and stop playing here.
+                    CastButton(container, tint = Color.White) { device ->
+                        scope.launch {
+                            val queue = com.mwalczak.player.PlaybackQueue(state.queueTitle, state.channels, state.index)
+                            container.remote.play(device, queue)
+                                .onSuccess { onExit() }
+                                .onFailure {
+                                    android.widget.Toast.makeText(context, "${device.name}: ${it.message}", android.widget.Toast.LENGTH_LONG).show()
+                                }
+                        }
+                    }
+                },
                 onPrevious = { controller.previous(); poke() },
                 onNext = { controller.next(); poke() },
             )
@@ -304,6 +341,7 @@ private fun Overlay(
     onFavorite: () -> Unit,
     onResize: () -> Unit,
     onList: () -> Unit,
+    castButton: @Composable () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
 ) {
@@ -344,6 +382,7 @@ private fun Overlay(
                 )
             }
             IconButton(onClick = onResize) { Icon(Icons.Default.AspectRatio, "Aspect: $resizeLabel", tint = Color.White) }
+            castButton()
             IconButton(onClick = onList) { Icon(Icons.AutoMirrored.Filled.List, "Channel list", tint = Color.White) }
         }
 

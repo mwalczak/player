@@ -78,6 +78,8 @@ import com.mwalczak.player.data.Channel
 import com.mwalczak.player.data.ChannelMatcher
 import com.mwalczak.player.ui.Actions
 import com.mwalczak.player.ui.common.CardShape
+import com.mwalczak.player.ui.common.CastButton
+import com.mwalczak.player.ui.common.RemoteBar
 import com.mwalczak.player.ui.common.ChannelGrid
 import com.mwalczak.player.ui.common.EmptyState
 import com.mwalczak.player.ui.common.focusHighlight
@@ -117,6 +119,7 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
         NavigationRail(
             windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical),
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            header = { CastButton(container) },
         ) {
             Spacer(Modifier.weight(1f))
             Tab.entries.forEach {
@@ -148,6 +151,7 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
                     Tab.Settings -> SettingsTab(container, actions)
                 }
             }
+            RemoteBar(container, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp))
         }
     }
 }

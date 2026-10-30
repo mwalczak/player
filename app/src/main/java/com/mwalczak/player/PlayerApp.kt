@@ -2,6 +2,7 @@ package com.mwalczak.player
 
 import android.app.Application
 import android.content.Context
+import com.mwalczak.player.cast.RemoteControl
 import com.mwalczak.player.data.CatalogRepository
 import com.mwalczak.player.data.Channel
 import com.mwalczak.player.data.LibraryStore
@@ -41,6 +42,7 @@ class AppContainer(context: Context) {
     val catalog = CatalogRepository(context, xtream)
     val library = LibraryStore(context, appScope)
     val updater = Updater(context, httpClient, appScope, BuildConfig.VERSION_CODE)
+    val remote = RemoteControl(context, httpClient, settings, catalog, appScope)
 
     /** Set right before navigating to the player screen. */
     var pendingQueue: PlaybackQueue? = null
