@@ -300,72 +300,99 @@ fun WithCatalog(container: AppContainer, state: CatalogState, content: @Composab
 private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogState) {
     val library by container.library.library.collectAsStateWithLifecycle()
     WithCatalog(container, state) { catalog ->
-        PullToRefreshBox(
-            isRefreshing = (state as? CatalogState.Ready)?.refreshing == true,
-            onRefresh = {
-                container.appScope.launch {
-                    container.settings.currentCredentials()?.let { container.catalog.load(it, force = true) }
-                }
-            },
-        ) {
-            val pinned = library.pinnedCategories.mapNotNull { id -> catalog.categories.firstOrNull { it.id == id } }
-            // Back from a category, the remote lands on the card it was opened from.
-            val gridState = rememberLazyGridState()
-            val memory = rememberFocusMemory()
-            val keys = buildList {
-                if (pinned.isNotEmpty()) {
-                    add("")
-                    pinned.forEach { add("pinned-${it.id}") }
-                }
-                add("")
-                if (library.recent.isNotEmpty()) add(RECENT)
-                add(ALL_CHANNELS)
-                catalog.categories.forEach { add(it.id) }
+        // Typing narrows the categories down (any word order, accents ignored), e.g. "pol sport".
+        var filter by rememberSaveable { mutableStateOf("") }
+        val terms = remember(filter) { ChannelMatcher.searchKey(filter).split(' ').filter { it.isNotBlank() } }
+        fun matches(name: String) = terms.isEmpty() || ChannelMatcher.searchKey(name).let { key -> terms.all { it in key } }
+        val categories = remember(catalog, terms) { catalog.categories.filter { matches(it.name) } }
+        val showRecent = library.recent.isNotEmpty() && matches("Recently watched")
+        val showAll = matches("All channels")
+        Column(Modifier.fillMaxSize()) {
+            OutlinedTextField(
+                value = filter,
+                onValueChange = { filter = it },
+                placeholder = { Text("Filter ${catalog.categories.size} categories") },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                trailingIcon = {
+                    if (filter.isNotEmpty()) IconButton(onClick = { filter = "" }) { Icon(Icons.Default.Close, "Clear filter") }
+                },
+                singleLine = true,
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp).widthIn(max = 640.dp).fillMaxWidth(),
+            )
+            if (terms.isNotEmpty() && categories.isEmpty() && !showRecent && !showAll) {
+                EmptyState("No categories match “$filter”.")
+                return@Column
             }
-            val target = memory.target { it in keys }
-            RestoreFocus(memory, target?.let(keys::indexOf) ?: -1, ready = true, gridState)
-            fun Modifier.remembered(key: String) = focusMemory(memory, key, target)
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 240.dp),
-                modifier = Modifier.fillMaxSize(),
-                state = gridState,
-                contentPadding = PaddingValues(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+            PullToRefreshBox(
+                modifier = Modifier.weight(1f),
+                isRefreshing = (state as? CatalogState.Ready)?.refreshing == true,
+                onRefresh = {
+                    container.appScope.launch {
+                        container.settings.currentCredentials()?.let { container.catalog.load(it, force = true) }
+                    }
+                },
             ) {
-                if (pinned.isNotEmpty()) {
-                    header { SectionHeader("Pinned") }
-                    items(pinned, key = { "pinned-${it.id}" }) { category ->
+                val pinned = library.pinnedCategories.mapNotNull { id -> catalog.categories.firstOrNull { it.id == id } }.filter { matches(it.name) }
+                // Back from a category, the remote lands on the card it was opened from.
+                val gridState = rememberLazyGridState()
+                val memory = rememberFocusMemory()
+                val keys = buildList {
+                    if (pinned.isNotEmpty()) {
+                        add("")
+                        pinned.forEach { add("pinned-${it.id}") }
+                    }
+                    add("")
+                    if (showRecent) add(RECENT)
+                    if (showAll) add(ALL_CHANNELS)
+                    categories.forEach { add(it.id) }
+                }
+                val target = memory.target { it in keys }
+                RestoreFocus(memory, target?.let(keys::indexOf) ?: -1, ready = true, gridState)
+                fun Modifier.remembered(key: String) = focusMemory(memory, key, target)
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 240.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    state = gridState,
+                    contentPadding = PaddingValues(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (pinned.isNotEmpty()) {
+                        header { SectionHeader("Pinned") }
+                        items(pinned, key = { "pinned-${it.id}" }) { category ->
+                            CategoryCard(
+                                category.name,
+                                catalog.channelsIn(category.id).size,
+                                pinned = true,
+                                onPin = { container.library.togglePinnedCategory(category.id) },
+                                modifier = Modifier.remembered("pinned-${category.id}"),
+                            ) { actions.openCategory(category.id) }
+                        }
+                    }
+                    header { SectionHeader("Categories") }
+                    if (showRecent) {
+                        item(key = RECENT) {
+                            CategoryCard("Recently watched", library.recent.size, icon = Icons.Default.History, modifier = Modifier.remembered(RECENT)) {
+                                actions.openCategory(RECENT)
+                            }
+                        }
+                    }
+                    if (showAll) {
+                        item(key = ALL_CHANNELS) {
+                            CategoryCard("All channels", catalog.channels.size, icon = Icons.Default.Tv, modifier = Modifier.remembered(ALL_CHANNELS)) {
+                                actions.openCategory(ALL_CHANNELS)
+                            }
+                        }
+                    }
+                    items(categories, key = { it.id }) { category ->
                         CategoryCard(
                             category.name,
                             catalog.channelsIn(category.id).size,
-                            pinned = true,
+                            pinned = category.id in library.pinnedCategories,
                             onPin = { container.library.togglePinnedCategory(category.id) },
-                            modifier = Modifier.remembered("pinned-${category.id}"),
+                            modifier = Modifier.remembered(category.id),
                         ) { actions.openCategory(category.id) }
                     }
-                }
-                header { SectionHeader("Categories") }
-                if (library.recent.isNotEmpty()) {
-                    item(key = RECENT) {
-                        CategoryCard("Recently watched", library.recent.size, icon = Icons.Default.History, modifier = Modifier.remembered(RECENT)) {
-                            actions.openCategory(RECENT)
-                        }
-                    }
-                }
-                item(key = ALL_CHANNELS) {
-                    CategoryCard("All channels", catalog.channels.size, icon = Icons.Default.Tv, modifier = Modifier.remembered(ALL_CHANNELS)) {
-                        actions.openCategory(ALL_CHANNELS)
-                    }
-                }
-                items(catalog.categories, key = { it.id }) { category ->
-                    CategoryCard(
-                        category.name,
-                        catalog.channelsIn(category.id).size,
-                        pinned = category.id in library.pinnedCategories,
-                        onPin = { container.library.togglePinnedCategory(category.id) },
-                        modifier = Modifier.remembered(category.id),
-                    ) { actions.openCategory(category.id) }
                 }
             }
         }
