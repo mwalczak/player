@@ -52,16 +52,6 @@ Install on a device or Fire TV with `adb install app/build/outputs/apk/debug/app
 
 `.github/workflows/build.yml` runs the unit tests and builds the APK on every push. On `main` it publishes a GitHub Release `build-<run number>` with `bunny-player.apk`. The APK's `versionCode` is the run number, which is how the in-app updater spots newer builds. Local builds are version 1 and never auto-update. All builds are signed with the committed `app/debug.keystore`, so any build installs over any other.
 
-### Optional mirror on PicoShare
-
-A second, non-blocking job also puts the APK on PicoShare on the VPS:
-
-1. The APK is copied over SSH (`VPS_HOST`, `VPS_SSH_KEY`; optional `VPS_USER` (default `debian`) and `VPS_PORT`).
-2. [`scripts/picoshare-upload.sh`](scripts/picoshare-upload.sh) runs on the VPS. It reads PicoShare's shared secret from the pod (namespace `files`) and uploads the APK through a `kubectl port-forward`.
-3. The script then swaps the upload into the existing **`android.all.apk`** entry. It moves the new file chunks under the old entry ID in PicoShare's SQLite DB, so **the download link never changes** and always serves the latest build.
-
-The script needs a working `kubectl` for the SSH user. It looks for `KUBECONFIG` in your shell rc files, then `~/.kube/config`, then tries passwordless `sudo k3s kubectl`.
-
 ## Project layout
 
 ```
