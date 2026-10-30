@@ -1,6 +1,7 @@
 package com.mwalczak.player.ui.theme
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -26,5 +27,9 @@ private val Colors = darkColorScheme(
 /** IPTV apps are mostly used in the dark on a TV or phone in landscape, so the app is dark-only. */
 @Composable
 fun PlayerTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = Colors, content = content)
+    MaterialTheme(colorScheme = Colors) {
+        // Root surface so every screen gets light text on the dark background by default,
+        // including screens that don't use a Scaffold.
+        Surface(color = Colors.background, contentColor = Colors.onBackground, content = content)
+    }
 }
