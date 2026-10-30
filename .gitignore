@@ -10,3 +10,4 @@
 .cxx/
 *.keystore
 !app/debug.keystore
+__pycache__/
