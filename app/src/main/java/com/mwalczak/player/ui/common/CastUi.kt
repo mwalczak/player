@@ -22,6 +22,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
@@ -55,7 +56,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun CastButton(
     container: AppContainer,
-    tint: Color = Color.Unspecified,
+    tint: Color = LocalContentColor.current,
     onPicked: (RemoteDevice) -> Unit = {},
 ) {
     val target by container.remote.target.collectAsStateWithLifecycle()
