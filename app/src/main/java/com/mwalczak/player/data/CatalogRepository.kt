@@ -19,10 +19,16 @@ import java.io.File
 
 class Catalog(
     val categories: List<Category>,
-    val channels: List<Channel>,
+    /** Every row the server sent; the same stream can appear in several categories. */
+    val allRows: List<Channel>,
     val loadedAtMillis: Long,
 ) {
-    val byCategory: Map<String, List<Channel>> = channels.groupBy { it.categoryId.orEmpty() }
+    /** Each channel once (lists keyed by stream id would crash on duplicates). */
+    val channels: List<Channel> = allRows.distinctBy { it.streamId }
+
+    /** Every category keeps all of its channels, including ones also listed elsewhere. */
+    val byCategory: Map<String, List<Channel>> =
+        allRows.groupBy { it.categoryId.orEmpty() }.mapValues { (_, list) -> list.distinctBy { it.streamId } }
     private val searchIndex: List<Pair<String, Channel>> = channels.map { ChannelMatcher.searchKey(it.name) to it }
 
     fun channelsIn(categoryId: String): List<Channel> = byCategory[categoryId].orEmpty()
@@ -98,7 +104,7 @@ class CatalogRepository(
             }
             withContext(Dispatchers.IO) {
                 cats.writeText(catsRaw)
-                streams.writeText(cacheJson.encodeToString(channelList, loaded.channels))
+                streams.writeText(cacheJson.encodeToString(channelList, loaded.allRows))
             }
             _state.value = CatalogState.Ready(loaded)
         } catch (e: Exception) {
@@ -126,7 +132,7 @@ class CatalogRepository(
                 }
             }.awaitAll()
         }
-        val merged = withContext(Dispatchers.Default) { mergeChannels(catalog.channels, perCategory.flatten()) }
+        val merged = withContext(Dispatchers.Default) { mergeChannels(catalog.allRows, perCategory.flatten()) }
         return Catalog(catalog.categories, merged, catalog.loadedAtMillis)
     }
 
@@ -145,8 +151,8 @@ class CatalogRepository(
     private val channelList = ListSerializer(Channel.serializer())
 }
 
-/** [base] plus any channels from [extra] it doesn't have yet, keeping the server's order. */
+/** [base] plus any rows from [extra] it doesn't have yet (same stream in the same category), keeping the order. */
 internal fun mergeChannels(base: List<Channel>, extra: List<Channel>): List<Channel> {
-    val seen = base.mapTo(HashSet()) { it.streamId }
-    return base + extra.filter { seen.add(it.streamId) }
+    val seen = base.mapTo(HashSet()) { it.streamId to it.categoryId }
+    return base + extra.filter { seen.add(it.streamId to it.categoryId) }
 }

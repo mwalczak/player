@@ -62,6 +62,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -431,11 +432,20 @@ fun CategoryScreen(container: AppContainer, actions: Actions, categoryId: String
             else -> catalog?.channelsIn(categoryId).orEmpty()
         }
     }
-    val shown = remember(channels, filter) {
-        if (filter.isBlank()) channels
-        else {
-            val key = ChannelMatcher.searchKey(filter)
-            channels.filter { ChannelMatcher.searchKey(it.name).contains(key) }
+    // Filtering tens of thousands of names happens off the main thread, with names folded once.
+    val keys by produceState<List<String>?>(null, channels) {
+        value = withContext(Dispatchers.Default) { channels.map { ChannelMatcher.searchKey(it.name) } }
+    }
+    val shown by produceState(channels, channels, filter, keys) {
+        val folded = keys
+        value = if (filter.isBlank() || folded == null) {
+            channels
+        } else {
+            delay(150)
+            withContext(Dispatchers.Default) {
+                val key = ChannelMatcher.searchKey(filter).trim()
+                channels.filterIndexed { i, _ -> folded[i].contains(key) }
+            }
         }
     }
 

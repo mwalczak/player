@@ -76,7 +76,7 @@ class XtreamTest {
     fun `catalog search matches all words in any order`() {
         val catalog = Catalog(
             categories = emptyList(),
-            channels = listOf(Channel(1, "UK: BBC One HD"), Channel(2, "UK: BBC Two"), Channel(3, "One Sports")),
+            allRows = listOf(Channel(1, "UK: BBC One HD"), Channel(2, "UK: BBC Two"), Channel(3, "One Sports")),
             loadedAtMillis = 0,
         )
         assertEquals(listOf(1), catalog.search("one bbc").map { it.streamId })

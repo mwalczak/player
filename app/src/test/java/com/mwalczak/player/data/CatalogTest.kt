@@ -16,9 +16,22 @@ class CatalogTest {
     fun `empty categories reveal a capped channel list`() {
         val catalog = Catalog(
             categories = listOf(Category("1", "Poland"), Category("2", "UK"), Category("3", "Sport")),
-            channels = listOf(Channel(1, "TVN", categoryId = "1")),
+            allRows = listOf(Channel(1, "TVN", categoryId = "1")),
             loadedAtMillis = 0,
         )
         assertEquals(listOf("2", "3"), catalog.emptyCategories.map { it.id })
+    }
+
+    @Test
+    fun `a stream listed in two categories appears once overall but in both categories`() {
+        val catalog = Catalog(
+            categories = listOf(Category("1", "Most Watched"), Category("128", "News")),
+            allRows = listOf(Channel(7, "US: FOX News", categoryId = "1"), Channel(7, "US: FOX News", categoryId = "128"), Channel(8, "US: CNN", categoryId = "128")),
+            loadedAtMillis = 0,
+        )
+        assertEquals(listOf(7, 8), catalog.channels.map { it.streamId })
+        assertEquals(listOf(7), catalog.search("fox").map { it.streamId })
+        assertEquals(listOf(7), catalog.channelsIn("1").map { it.streamId })
+        assertEquals(listOf(7, 8), catalog.channelsIn("128").map { it.streamId })
     }
 }
