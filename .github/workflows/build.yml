@@ -97,8 +97,9 @@ jobs:
           remote="/tmp/bunny-player-${GITHUB_RUN_NUMBER}.apk"
           scp -i ~/.ssh/id_vps -P "$VPS_PORT" -o BatchMode=yes bunny-player.apk "$VPS_USER@$VPS_HOST:$remote"
           note="Bunny Player build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA::7})"
-          out=$(ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
-            "bash -s -- '$remote' $(printf '%q' "$note") 365 android.all.apk; rc=\$?; rm -f '$remote'; exit \$rc" < scripts/picoshare-upload.sh)
-          echo "$out"
-          url=$(echo "$out" | sed -n 's/^PICOSHARE_URL=//p')
+          set -o pipefail
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "bash -s -- '$remote' $(printf '%q' "$note") 365 android.all.apk; rc=\$?; rm -f '$remote'; exit \$rc" \
+            < scripts/picoshare-upload.sh 2>&1 | tee upload.log
+          url=$(sed -n 's/^PICOSHARE_URL=//p' upload.log)
           echo "### 📦 APK on PicoShare: $url" >> "$GITHUB_STEP_SUMMARY"

@@ -23,7 +23,7 @@ LOCAL_PORT=14001
 # Non-interactive ssh sessions skip ~/.bashrc, so pick up the KUBECONFIG an interactive shell would use,
 # then fall back to sudo (k3s keeps /etc/rancher/k3s/k3s.yaml root-only by default).
 if [[ -z "${KUBECONFIG:-}" ]]; then
-  kc="$(grep -hoE 'KUBECONFIG=[^ ;]+' ~/.bashrc ~/.profile ~/.bash_profile ~/.zshrc 2>/dev/null | tail -1 | cut -d= -f2- | tr -d "\"'")"
+  kc="$(grep -hoE 'KUBECONFIG=[^ ;]+' ~/.bashrc ~/.profile ~/.bash_profile ~/.zshrc 2>/dev/null | tail -1 | cut -d= -f2- | tr -d "\"'" || true)"
   kc="${kc/#\~/$HOME}"
   kc="${kc//\$HOME/$HOME}"
   [[ -n "$kc" && -r "$kc" ]] && export KUBECONFIG="$kc"
