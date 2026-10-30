@@ -285,6 +285,9 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             )
         }
 
+        SectionHeader(startPadding = 16.dp, text = "Sync & sharing")
+        SyncSection(container, creds?.username)
+
         SectionHeader(startPadding = 16.dp, text = "Other devices")
         ListItem(
             headlineContent = { Text("Copy favorites & settings to TV") },
@@ -293,7 +296,7 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             modifier = Modifier.clickable { copyingToTv = true },
         )
 
-        SectionHeader(startPadding = 16.dp, text = "Backup & sharing")
+        SectionHeader(startPadding = 16.dp, text = "Backup file")
         ListItem(
             headlineContent = { Text("Export favorites & settings") },
             supportingContent = { Text("Share a file with a friend or keep it as a backup – login optional") },

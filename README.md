@@ -44,8 +44,12 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   - Casting from the player hands over the channel you're watching.
   - If the TV app isn't signed in, the phone sets it up like itself: login, favorites, lists, pinned categories and settings. A signed-in TV with no favorites gets yours too.
   - Devices find each other with mDNS (`_bunnyplayer._tcp`) and talk over plain HTTP on the local network. The TV uses its own player, so `.ts` streams and failover work exactly as they do on the TV. This avoids Chromecast, whose receiver can't play raw `.ts` and needs CORS headers that IPTV servers don't send.
+- **Sync & sharing** (Settings → *Sync & sharing*): favorites, lists, pinned categories and playback/guide settings are saved online on the sync server ([server/](server/), deployed to `bunny.walczaki.com`).
+  - Every device signed in with the same mybunny login shares one setup, both ways. After a reinstall, signing in brings everything back. The server never sees the login: the app derives a key from it (PBKDF2) and the server stores only a hash of that key.
+  - Each setup has a share code (e.g. `ABCD-EFGH`). A friend enters it under *Use someone's setup* and either **follows** it (their device shows your setup and gets your changes) or **copies it once** and makes it their own. Logins are never shared this way.
+  - The app syncs when it opens, every 5 minutes while open, and a moment after each change. A fresh install never uploads its empty setup over the saved one.
 - **Copy to TV**: Settings → *Copy favorites & settings to TV* sends your favorites (in order), lists, pinned categories, playback and guide settings and login to the TV app over Wi-Fi, so you don't set everything up twice. Open Bunny Player on the TV first.
-- **Export / import**: Settings → *Export favorites & settings* creates a file and opens the share sheet (WhatsApp, e-mail, Drive…).
+- **Export / import file**: Settings → *Backup file* → *Export favorites & settings* creates a file and opens the share sheet (WhatsApp, e-mail, Drive…).
   - Tick *Include login* to also share the server, username and password.
   - On a fresh install, the login page has **Import settings file**: pick the file and the app signs in and applies everything.
   - In Settings, *Import from file* can either add to your own favorites and lists or replace them.

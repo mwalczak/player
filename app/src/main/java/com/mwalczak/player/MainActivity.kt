@@ -22,10 +22,13 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         // Advertise this device and look for others (phone -> TV remote) while the app is open.
         appContainer.remote.start()
+        // Fetch favorites and lists saved from other devices, and keep them in sync while open.
+        appContainer.sync.resume()
     }
 
     override fun onStop() {
         appContainer.remote.stop()
+        appContainer.sync.pause()
         super.onStop()
     }
 

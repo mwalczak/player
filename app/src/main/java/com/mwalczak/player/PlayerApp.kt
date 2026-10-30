@@ -6,6 +6,8 @@ import com.mwalczak.player.cast.RemoteControl
 import com.mwalczak.player.data.CatalogRepository
 import com.mwalczak.player.data.CatalogState
 import com.mwalczak.player.data.epg.EpgRepository
+import com.mwalczak.player.data.sync.SyncClient
+import com.mwalczak.player.data.sync.SyncManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -63,6 +65,7 @@ class AppContainer(context: Context) {
     val updater = Updater(context, httpClient, appScope, BuildConfig.VERSION_CODE)
     val remote = RemoteControl(context, httpClient, settings, catalog, library, appScope)
     val epg = EpgRepository(context, httpClient, xtream, appScope)
+    val sync = SyncManager(context, SyncClient(httpClient), settings, library, catalog, appScope)
 
     /** Current time in epoch seconds, ticking every 30 s, for "now" lines and progress bars. */
     val clock: StateFlow<Long> = flow {
