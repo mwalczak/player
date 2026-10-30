@@ -188,7 +188,7 @@ fun GuideTab(container: AppContainer, actions: Actions) {
                             onRowFocus = { preview.index = it },
                             modifier = Modifier.weight(1f),
                         ) { index, focused -> if (focused || preview.index == index) fullscreen(index) else preview.index = index }
-                        PreviewPane(container, channels, preview, fullscreen, Modifier.weight(0.6f))
+                        PreviewPane(container, channels, preview, fullscreen, Modifier.weight(0.6f).padding(start = 16.dp))
                     }
                 } else {
                     GuideGrid(container, channels, epg.version, scroll) { index, _ -> actions.play(title, channels, index) }
