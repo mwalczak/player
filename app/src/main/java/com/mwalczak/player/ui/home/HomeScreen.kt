@@ -1,5 +1,8 @@
 package com.mwalczak.player.ui.home
 
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.Home
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -110,8 +113,10 @@ import kotlinx.coroutines.withContext
 const val ALL_CHANNELS = "__all__"
 const val RECENT = "__recent__"
 
-private enum class Tab(val label: String, val icon: ImageVector) {
-    Favorites("Favorites", Icons.Default.Star),
+private enum class Tab(val label: String, val icon: ImageVector, val inNavigation: Boolean = true) {
+    Start("Home", Icons.Default.Home),
+    // Opened from its tile on Home, so not in the navigation itself.
+    Favorites("Favorites", Icons.Default.Star, inNavigation = false),
     Live("Live TV", Icons.Default.LiveTv),
     Guide("TV guide", Icons.Default.CalendarViewWeek),
     Search("Search", Icons.Default.Search),
@@ -125,9 +130,19 @@ private val ContentInsets: WindowInsets
 
 @Composable
 fun HomeScreen(container: AppContainer, actions: Actions) {
-    // Open on Favorites when there are some, otherwise on the full Live TV list.
-    var tab by rememberSaveable {
-        mutableStateOf(if (container.library.library.value.favorites.isNotEmpty()) Tab.Favorites else Tab.Live)
+    // Home is the first page, and Back leads there from every other tab; Back on Home asks
+    // before leaving the app.
+    var tab by rememberSaveable { mutableStateOf(Tab.Start) }
+    var confirmingExit by remember { mutableStateOf(false) }
+    BackHandler { if (tab != Tab.Start) tab = Tab.Start else confirmingExit = true }
+    if (confirmingExit) {
+        val activity = LocalActivity.current
+        AlertDialog(
+            onDismissRequest = { confirmingExit = false },
+            title = { Text("Leave Bunny Player?") },
+            confirmButton = { TextButton(onClick = { confirmingExit = false; activity?.finish() }) { Text("Leave") } },
+            dismissButton = { TextButton(onClick = { confirmingExit = false }) { Text("Stay") } },
+        )
     }
     val catalogState by container.catalog.state.collectAsStateWithLifecycle()
 
@@ -143,6 +158,7 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
                 CrashReportBanner()
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when (tab) {
+                        Tab.Start -> StartTab(container, actions, onBrowseFavorites = { tab = Tab.Favorites }, onFindChannels = { tab = Tab.Live })
                         Tab.Live -> LiveTab(container, actions, catalogState)
                         Tab.Guide -> GuideTab(container, actions)
                         Tab.Search -> SearchTab(container, actions, catalogState)
@@ -167,7 +183,7 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
                         .padding(start = 16.dp, end = 4.dp, top = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(tab.label, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    Text(if (tab == Tab.Start) "Bunny Player" else tab.label, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                     CastButton(container)
                     // Settings lives up here on a phone so the bottom bar keeps five items.
                     IconButton(onClick = { tab = Tab.Settings }) {
@@ -185,9 +201,9 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
                         .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
                 )
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                    Tab.entries.filter { it != Tab.Settings }.forEach {
+                    Tab.entries.filter { it != Tab.Settings && it.inNavigation }.forEach {
                         NavigationBarItem(
-                            selected = tab == it,
+                            selected = tab == it || (it == Tab.Start && tab == Tab.Favorites),
                             onClick = { tab = it },
                             icon = { Icon(it.icon, contentDescription = null) },
                             label = { Text(it.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
@@ -204,9 +220,9 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
                     header = { CastButton(container) },
                 ) {
                     Spacer(Modifier.weight(1f))
-                    Tab.entries.forEach {
+                    Tab.entries.filter { it.inNavigation }.forEach {
                         NavigationRailItem(
-                            selected = tab == it,
+                            selected = tab == it || (it == Tab.Start && tab == Tab.Favorites),
                             onClick = { tab = it },
                             icon = { Icon(it.icon, contentDescription = null) },
                             label = { Text(it.label, maxLines = 1) },
