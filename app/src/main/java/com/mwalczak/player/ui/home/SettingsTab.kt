@@ -192,7 +192,7 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
         ListItem(
             headlineContent = { Text("Change channel every ${autoplayLabel(autoplaySeconds)}") },
             supportingContent = {
-                Text("Autoplay (next to Play all in favorites, lists and categories) goes through the channels like this. Tap to change (${autoplayTimes.joinToString(" / ") { autoplayLabel(it) }})")
+                Text("Autoplay (in favorites, lists and categories) goes through the channels like this. Tap to change (${autoplayTimes.joinToString(" / ") { autoplayLabel(it) }})")
             },
             leadingContent = { Icon(Icons.Default.Autorenew, null) },
             modifier = Modifier.clickable {

@@ -15,6 +15,8 @@ import androidx.compose.ui.platform.LocalContext
 import android.content.Context
 import android.widget.Toast
 import com.mwalczak.player.cast.RemoteCommand
+import com.mwalczak.player.cast.RemoteStatus
+import com.mwalczak.player.cast.isPlaying
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -63,6 +65,15 @@ class Actions(
             return
         }
         playLocally(queue)
+    }
+
+    /**
+     * Autoplay through [channels], starting from the channel being watched: the one on the TV
+     * when casting, otherwise the one watched last here (the top of the list if neither is in it).
+     */
+    fun autoplay(title: String, channels: List<Channel>) {
+        val start = autoplayStart(channels, container.remote.targetStatus.value, container.library.library.value.recent)
+        play(title, channels, start, autoplay = true)
     }
 
     fun playLocally(queue: PlaybackQueue) {
@@ -143,3 +154,9 @@ fun AppNavigation(container: AppContainer) {
         composable(Routes.PLAYER) { PlayerScreen(container, onExit = { actions.back() }) }
     }
 }
+
+/** Where autoplay starts in [channels]: what [onTv] shows, else the most [recent] one in the list, else the top. */
+internal fun autoplayStart(channels: List<Channel>, onTv: RemoteStatus?, recent: List<Channel>): Int =
+    channels.indexOfFirst { onTv?.isPlaying(it) == true }.takeIf { it >= 0 }
+        ?: recent.firstNotNullOfOrNull { watched -> channels.indexOfFirst { it.streamId == watched.streamId }.takeIf { it >= 0 } }
+        ?: 0

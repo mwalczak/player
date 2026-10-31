@@ -586,7 +586,7 @@ fun CategoryScreen(container: AppContainer, actions: Actions, categoryId: String
                     modifier = Modifier.weight(1f, fill = false).widthIn(max = 420.dp).fillMaxWidth(),
                 )
                 // Plays what's shown (the whole category, or what the filter left) with autoplay on.
-                TextButton(onClick = { actions.play(title, shown, 0, autoplay = true) }, enabled = shown.isNotEmpty()) {
+                TextButton(onClick = { actions.autoplay(title, shown) }, enabled = shown.isNotEmpty()) {
                     Icon(Icons.Default.Autorenew, null)
                     Text(" Autoplay")
                 }
