@@ -145,6 +145,7 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
         tab = Tab.Start
     }
     var confirmingExit by remember { mutableStateOf(false) }
+    com.mwalczak.player.ui.common.WhatsNewAfterUpdate(container)
     BackHandler { if (tab != Tab.Start) tab = Tab.Start else confirmingExit = true }
     if (confirmingExit) {
         val activity = LocalActivity.current

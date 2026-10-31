@@ -1,5 +1,9 @@
 package com.mwalczak.player.ui.home
 
+import androidx.compose.ui.platform.LocalContext
+import com.mwalczak.player.ui.common.WhatsNewDialog
+import com.mwalczak.player.data.Changelog
+import androidx.compose.material.icons.filled.NewReleases
 import com.mwalczak.player.data.ChannelMatcher
 import com.mwalczak.player.data.Category
 import androidx.compose.material.icons.filled.Visibility
@@ -337,6 +341,18 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
         SyncSection(container, creds?.username)
 
         SectionHeader(startPadding = 16.dp, text = "App")
+        var changelogOpen by remember { mutableStateOf(false) }
+        if (changelogOpen) {
+            val context = LocalContext.current
+            val entries = remember { Changelog.load(context) }
+            WhatsNewDialog(entries, title = "Changelog", onDismiss = { changelogOpen = false })
+        }
+        ListItem(
+            headlineContent = { Text("What's new") },
+            supportingContent = { Text("Everything that changed, newest first") },
+            leadingContent = { Icon(Icons.Default.NewReleases, null) },
+            modifier = Modifier.clickable { changelogOpen = true },
+        )
         ListItem(
             headlineContent = { Text("Version ${BuildConfig.VERSION_NAME}") },
             supportingContent = {

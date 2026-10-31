@@ -43,6 +43,7 @@ class SettingsStore(private val context: Context) {
         val preview = booleanPreferencesKey("preview_while_browsing")
         val guideSource = stringPreferencesKey("guide_source")
         val autoplaySeconds = intPreferencesKey("autoplay_seconds")
+        val changelogSeen = intPreferencesKey("changelog_seen")
     }
 
     /** Live preview next to channel lists on wide screens (TV, tablet, landscape phone). */
@@ -50,6 +51,13 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setPreviewWhileBrowsing(enabled: Boolean) {
         context.dataStore.edit { it[Keys.preview] = enabled }
+    }
+
+    /** The newest "what's new" entry already shown; null before the first one. */
+    val changelogSeen: Flow<Int?> = context.dataStore.data.map { it[Keys.changelogSeen] }
+
+    suspend fun setChangelogSeen(id: Int) {
+        context.dataStore.edit { it[Keys.changelogSeen] = id }
     }
 
     /** How long autoplay stays on each channel. */

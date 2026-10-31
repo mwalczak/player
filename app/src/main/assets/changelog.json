@@ -1,0 +1,56 @@
+[
+  {
+    "id": 1,
+    "date": "2026-10-29",
+    "title": "Live TV, favorites and the TV guide",
+    "items": [
+      "All live channels and categories, search, favorites and your own lists",
+      "TV guide grid with show search, guides from many countries",
+      "Cast from the phone to the TV over Wi-Fi",
+      "A channel that's off: other feeds of it, then the next channel in the list"
+    ]
+  },
+  {
+    "id": 2,
+    "date": "2026-10-30",
+    "title": "Preview, sync and sharing",
+    "items": [
+      "Live preview next to channel lists and the guide on TV, tablet and landscape phone",
+      "Favorites, lists and settings saved online: back after a reinstall, on every device with your login",
+      "Share code for friends (follow or copy), and History of the last 100 versions",
+      "Reorder by drag and drop, A–Z sorting, category filter on Live TV"
+    ]
+  },
+  {
+    "id": 3,
+    "date": "2026-10-31",
+    "title": "Home page and autoplay",
+    "items": [
+      "Home: tiles for Favorites, your lists and pinned categories; Back leads home, then asks before leaving",
+      "Autoplay: goes through a list, a channel every minute (Settings → Autoplay); ▶ / ⏸ on the remote",
+      "Pinned categories keep their place when the provider renumbers its categories",
+      "The channel playing on the TV is underlined while casting"
+    ]
+  },
+  {
+    "id": 4,
+    "date": "2026-10-31",
+    "title": "Dead channels, reminders and the TV home screen",
+    "items": [
+      "Channels showing a silent “temporarily unavailable” screen are skipped after 5 s",
+      "Other feeds of a channel and ⟳ reload, in the player and on the phone remote",
+      "Reminders: long-press a show in the guide to be reminded or switched to it",
+      "Favorites on the TV home screen, last channel in Continue watching",
+      "Player controls hide after 5 s; zapping no longer opens them"
+    ]
+  },
+  {
+    "id": 5,
+    "date": "2026-10-31",
+    "title": "Hidden categories and What's new",
+    "items": [
+      "Hide categories you never watch: long-press one on Live TV, or Settings → Hidden categories",
+      "This “What's new” after an update, and the full list in Settings → App"
+    ]
+  }
+]
