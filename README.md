@@ -37,6 +37,7 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
 - **My lists**: create, rename, delete and reorder (by hand or A–Z) your own lists ("Sports", "News"…) and add channels from search.
 - **Player** (ExoPlayer / Media3):
   - Switch channels with swipe up/down, the ⏮ ⏭ buttons, or the remote (◀ ▶ or CH+/CH−). Zapping with swipes or the remote doesn't bring up the controls; a small label shows the new channel's number and name for 3 s.
+  - ⟳ next to ⏮ ⏭ reloads the channel when it froze. ⇄-shaped *Other feeds* in the top controls lists other streams of the same channel from the whole catalog (then similar names); pick one to switch to it.
   - On a TV remote, **▲** jumps to the controls at the top (☆ favorite, add to list, aspect, cast, schedule, channel list) and **▼** to the ⏮ ⏭ ⇄ buttons. Move with ◀ ▶, press OK, and Back returns to the picture. A white ring shows the selected button.
   - ⇄ **Last channel** flips between the current channel and the one you watched before. The button shows its name, and the remote's Last key works too.
   - Open the side channel list with the list button or OK on a remote.
@@ -61,7 +62,7 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   2. The app tries other feeds of the same channel from the catalog. For example, if `US: ESPN HD` is down it plays `ESPN FHD` or `ESPN ᴴᴰ (Backup)`.
   3. If none of those work, it moves to the next channel in the list you're watching. This is why the order of your favorites and lists matters.
 
-  A channel also counts as off if it keeps buffering (8 / 15 / 30 s, set in Settings), or if it plays but has no sound for 5 s: providers' "temporarily unavailable" screens are silent. The sound level is measured on the decoded audio, so when Dolby/DTS goes straight to a soundbar this check simply doesn't apply. Each step can be turned off in **Settings → When a channel is off**.
+  A channel also counts as off if it keeps buffering (8 / 15 / 30 s, set in Settings), or if it plays but has no sound for 5 s: providers' "temporarily unavailable" screens are silent. The sound level is measured on the decoded audio: stereo AAC/MP2 channels (most IPTV) are measured even with a soundbar; Dolby/DTS passed straight to a soundbar can't be, so those are never skipped for silence. Settings → When a channel is off → *Skip channels without sound* turns it off. Each step can be turned off in **Settings → When a channel is off**.
 - **Live preview while browsing** (TV, tablet, landscape phone): a preview pane next to channel lists and the TV guide plays the selected channel. On a remote, moving through the list previews the focused channel after a short pause and **OK** opens full screen. On touch, the first tap previews and a second tap (or a tap on the preview) opens full screen. The preview hands its stream over before full screen starts, so it works with a 1-connection account. It can be turned off in Settings → Display.
 - **Display**: Settings → *Columns in channel lists* (automatic or 1–4) per device; channel names wrap to two lines.
 - **Crash reports**: if the app crashes (or a background job fails), the next start shows a banner with **Share report**, so the error can be sent and fixed.

@@ -40,4 +40,18 @@ class ChannelMatcherTest {
     fun `search key ignores case and accents`() {
         assertEquals("tele cinco", ChannelMatcher.searchKey("Télé Cinco"))
     }
+
+    @Test
+    fun `similar names are offered as other feeds, without the exact ones or unrelated channels`() {
+        val f1 = Channel(1, "UK: Sky Sports F1 FHD")
+        val catalog = listOf(
+            f1,
+            Channel(2, "Sky Sports F1 HD"),          // same channel: an alternate, not "similar"
+            Channel(3, "UK: Sky Sports F1 Extra"),   // similar name
+            Channel(4, "UK: Sky Sports Main Event"), // different channel
+            Channel(5, "US: F1 TV"),
+        )
+        assertEquals(listOf(2), ChannelMatcher.alternatesFor(f1, catalog).map { it.streamId })
+        assertEquals(listOf(3), ChannelMatcher.similarTo(f1, catalog).map { it.streamId })
+    }
 }

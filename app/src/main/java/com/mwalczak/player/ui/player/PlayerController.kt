@@ -159,6 +159,18 @@ class PlayerController(
 
     fun previous() = select(_state.value.index - 1)
 
+    /** Plays another feed of the channel (picked by hand), staying at the same place in the list. */
+    fun playFeed(channel: Channel) {
+        failed.clear()
+        retried.clear()
+        hops = 0
+        silentSkips = 0
+        play(channel, notice = null)
+    }
+
+    /** Starts the stream on screen again, e.g. when it froze. */
+    fun reload() = playFeed(_state.value.playing)
+
     /** Turns autoplay on: from now on the next channel comes on every [autoplaySeconds]. */
     fun startAutoplay() {
         _state.update { it.copy(autoplay = Autoplay(autoplaySeconds)) }

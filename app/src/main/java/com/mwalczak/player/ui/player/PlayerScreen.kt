@@ -2,6 +2,15 @@
 
 package com.mwalczak.player.ui.player
 
+import androidx.compose.foundation.lazy.items
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import com.mwalczak.player.ui.home.categoryName
+import com.mwalczak.player.data.Channel
+import com.mwalczak.player.data.Catalog
+import com.mwalczak.player.data.ChannelMatcher
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.AltRoute
 import kotlinx.coroutines.flow.first
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
@@ -150,6 +159,7 @@ private fun PlayerContent(
     var overlay by remember { mutableStateOf(true) }
     var panel by remember { mutableStateOf(false) }
     var schedule by remember { mutableStateOf(false) }
+    var feeds by remember { mutableStateOf(false) }
     var resizeIndex by remember { mutableIntStateOf(0) }
     var interaction by remember { mutableIntStateOf(0) }
     val focus = remember { FocusRequester() }
@@ -261,10 +271,11 @@ private fun PlayerContent(
     }
     LaunchedEffect(Unit) { focus.requestFocus() }
 
-    BackHandler(enabled = panel || schedule || overlay) {
+    BackHandler(enabled = panel || schedule || feeds || overlay) {
         when {
             panel -> panel = false
             schedule -> schedule = false
+            feeds -> feeds = false
             else -> overlay = false
         }
     }
@@ -293,7 +304,7 @@ private fun PlayerContent(
                     Key.MediaPause -> { controller.pauseAutoplay(); return@onKeyEvent true }
                     Key.MediaPlayPause -> { controller.toggleAutoplay(); return@onKeyEvent true }
                 }
-                if (panel || schedule) return@onKeyEvent false
+                if (panel || schedule || feeds) return@onKeyEvent false
                 // Keys pressed while a button in the overlay is focused belong to that button / focus moves.
                 if (!pictureFocused) return@onKeyEvent false
                 // Guide button on TV remotes: today's schedule for this channel.
@@ -427,6 +438,8 @@ private fun PlayerContent(
                 onResize = { resizeIndex = (resizeIndex + 1) % resizeModes.size; poke() },
                 onList = { panel = true },
                 onSchedule = { schedule = true },
+                onFeeds = { feeds = true },
+                onReload = { controller.reload(); poke() },
                 onAutoplay = { controller.toggleAutoplay(); poke() },
                 onStopAutoplay = { controller.stopAutoplay(); poke() },
                 castButton = {
@@ -467,6 +480,18 @@ private fun PlayerContent(
         }
 
         AnimatedVisibility(
+            visible = feeds,
+            enter = slideInHorizontally { it },
+            exit = slideOutHorizontally { it },
+            modifier = Modifier.align(Alignment.CenterEnd),
+        ) {
+            FeedsPanel(container, state) { channel ->
+                controller.playFeed(channel)
+                feeds = false
+            }
+        }
+
+        AnimatedVisibility(
             visible = schedule,
             enter = slideInHorizontally { it },
             exit = slideOutHorizontally { it },
@@ -481,7 +506,7 @@ private fun PlayerContent(
     }
 
     // Give key focus back to the player when the panel closes, so the remote keeps zapping.
-    LaunchedEffect(panel, schedule) { if (!panel && !schedule) runCatching { focus.requestFocus() } }
+    LaunchedEffect(panel, schedule, feeds) { if (!panel && !schedule && !feeds) runCatching { focus.requestFocus() } }
 }
 
 @Composable
@@ -498,6 +523,8 @@ private fun Overlay(
     onResize: () -> Unit,
     onList: () -> Unit,
     onSchedule: () -> Unit,
+    onFeeds: () -> Unit,
+    onReload: () -> Unit,
     onAutoplay: () -> Unit,
     onStopAutoplay: () -> Unit,
     castButton: @Composable () -> Unit,
@@ -582,6 +609,7 @@ private fun Overlay(
             }
             IconButton(onClick = onResize, modifier = Modifier.focusRing()) { Icon(Icons.Default.AspectRatio, "Aspect: $resizeLabel", tint = Color.White) }
             Box(Modifier.focusRing()) { castButton() }
+            IconButton(onClick = onFeeds, modifier = Modifier.focusRing()) { Icon(Icons.Default.AltRoute, "Other feeds of this channel", tint = Color.White) }
             IconButton(onClick = onSchedule, modifier = Modifier.focusRing()) { Icon(Icons.Default.Schedule, "Today's schedule", tint = Color.White) }
             IconButton(onClick = onList, modifier = Modifier.focusRing()) { Icon(Icons.AutoMirrored.Filled.List, "Channel list", tint = Color.White) }
         }
@@ -607,6 +635,11 @@ private fun Overlay(
                 Spacer(Modifier.width(32.dp))
                 IconButton(onClick = onNext, enabled = state.channels.size > 1, modifier = Modifier.focusRing()) {
                     Icon(Icons.Default.SkipNext, "Next channel", tint = Color.White, modifier = Modifier.size(36.dp))
+                }
+                Spacer(Modifier.width(32.dp))
+                // When a stream froze: start it again.
+                IconButton(onClick = onReload, modifier = Modifier.focusRing()) {
+                    Icon(Icons.Default.Refresh, "Reload channel", tint = Color.White, modifier = Modifier.size(32.dp))
                 }
                 Spacer(Modifier.width(32.dp))
                 // "Last channel": flip between this channel and the one watched before.
@@ -855,5 +888,97 @@ private fun ChannelLabel(state: PlayerUiState) {
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.widthIn(max = 420.dp),
         )
+    }
+}
+
+/**
+ * Other streams of the channel picked in the list, from the whole catalog: the same channel first
+ * (other quality / backup feeds), then similar names. Picking one plays it in the same place.
+ */
+@Composable
+private fun FeedsPanel(container: AppContainer, state: PlayerUiState, onSelect: (Channel) -> Unit) {
+    val wanted = state.channels[state.index]
+    val catalog = container.catalog.catalog
+    val found by produceState<Pair<List<Channel>, List<Channel>>?>(null, wanted.streamId, catalog) {
+        val all = catalog?.channels.orEmpty()
+        value = withContext(Dispatchers.Default) {
+            (listOf(wanted) + ChannelMatcher.alternatesFor(wanted, all)) to ChannelMatcher.similarTo(wanted, all)
+        }
+    }
+    val first = remember { FocusRequester() }
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(360.dp)
+            .background(Color(0xE6101418))
+            .safeDrawingPadding(),
+    ) {
+        item {
+            Text(
+                "Other feeds of ${wanted.name}",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(16.dp),
+            )
+        }
+        val (same, similar) = found ?: run {
+            item { CircularProgressIndicator(Modifier.padding(16.dp)) }
+            return@LazyColumn
+        }
+        items(same, key = { "same-${it.streamId}" }) { channel ->
+            FeedRow(catalog, channel, playing = channel.streamId == state.playing.streamId, Modifier.then(if (channel === same.first()) Modifier.focusRequester(first) else Modifier)) {
+                onSelect(channel)
+            }
+        }
+        if (same.size == 1) {
+            item {
+                Text(
+                    "No other feed of this channel in the catalog.",
+                    color = Color.White.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+        }
+        if (similar.isNotEmpty()) {
+            item {
+                Text(
+                    "Similar names",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
+                )
+            }
+            items(similar, key = { "similar-${it.streamId}" }) { channel ->
+                FeedRow(catalog, channel, playing = channel.streamId == state.playing.streamId) { onSelect(channel) }
+            }
+        }
+    }
+    LaunchedEffect(found != null) { if (found != null) runCatching { first.requestFocus() } }
+}
+
+@Composable
+private fun FeedRow(catalog: Catalog?, channel: Channel, playing: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .background(if (playing) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        ChannelLogo(channel.icon, Modifier.size(36.dp))
+        Column(Modifier.weight(1f)) {
+            Text(channel.name, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val category = catalog?.categoryName(channel)
+            Text(
+                listOfNotNull(if (playing) "Playing" else null, category).joinToString(" · "),
+                color = Color.White.copy(alpha = 0.6f),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }

@@ -36,6 +36,26 @@ object ChannelMatcher {
             .sortedWith(compareByDescending<Channel> { it.categoryId == channel.categoryId }.thenBy { it.num })
     }
 
+    /**
+     * Channels with a name like [channel]'s that aren't [alternatesFor] it: all its words in their
+     * name, and not much else (for picking another feed by hand). At most [limit].
+     */
+    fun similarTo(channel: Channel, catalog: List<Channel>, limit: Int = 30): List<Channel> {
+        val key = baseName(channel.name)
+        val words = key.split(' ').filter { it.isNotBlank() }
+        if (words.isEmpty()) return emptyList()
+        return catalog.asSequence()
+            .filter { it.streamId != channel.streamId }
+            .map { it to baseName(it.name) }
+            .filter { (_, name) ->
+                val theirs = name.split(' ')
+                name != key && words.all { it in theirs } && theirs.size <= words.size + 2
+            }
+            .map { it.first }
+            .take(limit)
+            .toList()
+    }
+
     /** Case- and accent-insensitive "contains" used by search. */
     fun searchKey(text: String): String = fold(text)
 
