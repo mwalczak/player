@@ -289,9 +289,9 @@ private fun PlayerContent(
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 // Play / pause keys run autoplay wherever the remote is (picture, controls, channel list).
                 when (event.key) {
-                    Key.MediaPlay -> { controller.playAutoplay(); poke(); return@onKeyEvent true }
-                    Key.MediaPause -> { controller.pauseAutoplay(); poke(); return@onKeyEvent true }
-                    Key.MediaPlayPause -> { controller.toggleAutoplay(); poke(); return@onKeyEvent true }
+                    Key.MediaPlay -> { controller.playAutoplay(); return@onKeyEvent true }
+                    Key.MediaPause -> { controller.pauseAutoplay(); return@onKeyEvent true }
+                    Key.MediaPlayPause -> { controller.toggleAutoplay(); return@onKeyEvent true }
                 }
                 if (panel || schedule) return@onKeyEvent false
                 // Keys pressed while a button in the overlay is focused belong to that button / focus moves.
@@ -309,12 +309,13 @@ private fun PlayerContent(
                 }
                 when (event.key) {
                     // ◀ ▶ zap, like CH- / CH+.
-                    Key.ChannelUp, Key.DirectionRight -> { controller.next(); poke(); true }
-                    Key.ChannelDown, Key.DirectionLeft -> { controller.previous(); poke(); true }
+                    // Zapping just changes the channel (a label says which); the controls stay as they are.
+                    Key.ChannelUp, Key.DirectionRight -> { controller.next(); true }
+                    Key.ChannelDown, Key.DirectionLeft -> { controller.previous(); true }
                     // ▲ goes to the controls at the top (favorite, add to list, …), ▼ to the zapping buttons.
                     Key.DirectionUp -> { poke(); focusTopTick++; true }
                     Key.DirectionDown -> { poke(); focusBottomTick++; true }
-                    Key.LastChannel -> { controller.last(); poke(); true }
+                    Key.LastChannel -> { controller.last(); true }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> { panel = true; true }
                     Key.Info, Key.Menu -> { poke(); true }
                     else -> false
@@ -331,7 +332,6 @@ private fun PlayerContent(
                     onDragEnd = {
                         if (abs(total) > 120f) {
                             if (total < 0) controller.next() else controller.previous()
-                            poke()
                         }
                     },
                     onVerticalDrag = { _, dy -> total += dy },
@@ -378,9 +378,39 @@ private fun PlayerContent(
             )
         }
 
-        // The countdown stays on screen; "paused" only shows with the controls, not over the picture.
-        state.autoplay?.takeIf { !it.paused || overlay }?.let { autoplay ->
+        // The countdown stays on screen; "paused" only shows with the controls, or for a moment
+        // after pausing, not over the picture.
+        var pausedJustNow by remember { mutableStateOf(false) }
+        LaunchedEffect(state.autoplay?.paused) {
+            if (state.autoplay?.paused == true) {
+                pausedJustNow = true
+                delay(3_000)
+            }
+            pausedJustNow = false
+        }
+        state.autoplay?.takeIf { !it.paused || overlay || pausedJustNow }?.let { autoplay ->
             AutoplayBadge(autoplay, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = 72.dp, end = 16.dp))
+        }
+
+        // After a channel change without the controls (zapping, autoplay): which channel this is, for a moment.
+        var channelLabel by remember { mutableStateOf(false) }
+        var firstChannel by remember { mutableStateOf(true) }
+        LaunchedEffect(state.index, state.channels) {
+            if (firstChannel) {
+                firstChannel = false
+                return@LaunchedEffect
+            }
+            channelLabel = true
+            delay(3_000)
+            channelLabel = false
+        }
+        AnimatedVisibility(
+            visible = channelLabel && !overlay,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(16.dp),
+        ) {
+            ChannelLabel(state)
         }
 
         AnimatedVisibility(visible = overlay, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
@@ -800,6 +830,30 @@ private fun AutoplayBadge(autoplay: Autoplay, modifier: Modifier = Modifier) {
             if (autoplay.paused) "Autoplay paused" else "Next in ${left / 60}:${"%02d".format(left % 60)}",
             color = Color.White,
             style = MaterialTheme.typography.labelLarge,
+        )
+    }
+}
+
+/** Number, logo and name of the channel just switched to. */
+@Composable
+private fun ChannelLabel(state: PlayerUiState) {
+    Row(
+        Modifier
+            .background(Color(0xCC000000), RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("${state.index + 1}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        ChannelLogo(state.channels[state.index].icon, Modifier.size(36.dp))
+        Text(
+            state.channels[state.index].name,
+            color = Color.White,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 420.dp),
         )
     }
 }
