@@ -169,6 +169,17 @@ class PlayerController(
         _state.update { it.copy(autoplay = null) }
     }
 
+    /** ▶ on a remote: turns autoplay on, or resumes it. */
+    fun playAutoplay() {
+        if (_state.value.autoplay == null) startAutoplay()
+        else _state.update { it.copy(autoplay = it.autoplay?.copy(paused = false)) }
+    }
+
+    /** ⏸ on a remote: pauses autoplay (nothing when it is off). */
+    fun pauseAutoplay() {
+        _state.update { it.copy(autoplay = it.autoplay?.copy(paused = true)) }
+    }
+
     /** Pauses or resumes autoplay; turns it on when it is off. */
     fun toggleAutoplay() {
         if (_state.value.autoplay == null) startAutoplay()

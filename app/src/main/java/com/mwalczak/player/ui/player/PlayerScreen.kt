@@ -286,7 +286,14 @@ private fun PlayerContent(
             .onFocusChanged { pictureFocused = it.isFocused }
             .focusable()
             .onKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown || panel || schedule) return@onKeyEvent false
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                // Play / pause keys run autoplay wherever the remote is (picture, controls, channel list).
+                when (event.key) {
+                    Key.MediaPlay -> { controller.playAutoplay(); poke(); return@onKeyEvent true }
+                    Key.MediaPause -> { controller.pauseAutoplay(); poke(); return@onKeyEvent true }
+                    Key.MediaPlayPause -> { controller.toggleAutoplay(); poke(); return@onKeyEvent true }
+                }
+                if (panel || schedule) return@onKeyEvent false
                 // Keys pressed while a button in the overlay is focused belong to that button / focus moves.
                 if (!pictureFocused) return@onKeyEvent false
                 // Guide button on TV remotes: today's schedule for this channel.
@@ -308,12 +315,6 @@ private fun PlayerContent(
                     Key.DirectionUp -> { poke(); focusTopTick++; true }
                     Key.DirectionDown -> { poke(); focusBottomTick++; true }
                     Key.LastChannel -> { controller.last(); poke(); true }
-                    // Play/pause on the remote pauses and resumes autoplay.
-                    Key.MediaPlayPause, Key.MediaPause, Key.MediaPlay -> {
-                        if (state.autoplay != null) controller.toggleAutoplay()
-                        poke()
-                        true
-                    }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> { panel = true; true }
                     Key.Info, Key.Menu -> { poke(); true }
                     else -> false
