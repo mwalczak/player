@@ -58,4 +58,6 @@ data class PlaybackSettings(
     val nextInList: Boolean = true,
     /** How long the player may stay buffering before the channel is considered off. */
     val stallTimeoutSec: Int = 15,
+    /** A channel with no sound for 5 s ("temporarily unavailable" screens) counts as off. */
+    val skipSilent: Boolean = true,
 )

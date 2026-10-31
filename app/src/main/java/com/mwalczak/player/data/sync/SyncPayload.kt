@@ -16,4 +16,5 @@ data class SyncPayload(
     /** Chosen guide sources; null = automatic. Optional so older apps' payloads still read. */
     val epgSources: List<String>? = null,
     val epgWifiOnly: Boolean = true,
+    val skipSilent: Boolean = true,
 )

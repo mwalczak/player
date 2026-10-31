@@ -178,6 +178,12 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             trailingContent = { Switch(checked = playback.nextInList, onCheckedChange = null) },
             modifier = Modifier.clickable { update { it.copy(nextInList = !it.nextInList) } },
         )
+        ListItem(
+            headlineContent = { Text("Skip channels without sound") },
+            supportingContent = { Text("“Temporarily unavailable” screens are silent: after 5 s without sound the channel counts as off") },
+            trailingContent = { Switch(checked = playback.skipSilent, onCheckedChange = null) },
+            modifier = Modifier.clickable { update { it.copy(skipSilent = !it.skipSilent) } },
+        )
         val timeouts = listOf(8, 15, 30)
         ListItem(
             headlineContent = { Text("Give up after buffering for ${playback.stallTimeoutSec} s") },

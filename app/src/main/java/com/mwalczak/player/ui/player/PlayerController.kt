@@ -11,6 +11,10 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.TeeAudioProcessor
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
@@ -92,6 +96,8 @@ class PlayerController(
     /** How long autoplay stays on each channel. */
     var autoplaySeconds: Int = DEFAULT_AUTOPLAY_SECONDS
 
+    private val silence = SilenceMeter()
+
     val player: ExoPlayer = buildPlayer(context)
 
     private val _state = MutableStateFlow(
@@ -119,6 +125,9 @@ class PlayerController(
     private var epgJob: Job? = null
     private var noticeJob: Job? = null
     private var autoplayJob: Job? = null
+    private var silenceJob: Job? = null
+    /** Channels skipped in a row for having no sound; stops the hunt when none in the list has any. */
+    private var silentSkips = 0
 
     private val listener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -198,6 +207,7 @@ class PlayerController(
         failed.clear()
         retried.clear()
         hops = 0
+        silentSkips = 0
         _state.update {
             it.copy(
                 index = wrapped,
@@ -219,6 +229,7 @@ class PlayerController(
 
     fun release() {
         autoplayJob?.cancel()
+        silenceJob?.cancel()
         stallJob?.cancel()
         retryJob?.cancel()
         limitJob?.cancel()
@@ -233,6 +244,8 @@ class PlayerController(
         stallJob?.cancel()
         retryJob?.cancel()
         limitJob?.cancel()
+        silenceJob?.cancel()
+        silence.reset()
         _state.update { it.copy(playing = channel, status = PlaybackStatus.Loading, epg = emptyList()) }
         if (recordRecent) container.lastPlayedStreamId = channel.streamId
         showNotice(notice)
@@ -251,12 +264,47 @@ class PlayerController(
 
     private fun onPlaying() {
         stallJob?.cancel()
+        if (_state.value.status != PlaybackStatus.Playing) watchForSilence()
         val current = _state.value
         if (recordRecent && current.status != PlaybackStatus.Playing) container.library.addRecent(current.playing)
         failed.clear()
         retried.clear()
         hops = 0
         _state.update { it.copy(status = PlaybackStatus.Playing) }
+    }
+
+    /**
+     * A channel that is "on" but shows a still "temporarily unavailable" screen has no sound (or
+     * no sound track at all): after a few seconds of that, treat it as off and move on.
+     */
+    private fun watchForSilence() {
+        silenceJob?.cancel()
+        if (!settings.skipSilent || !recordRecent) return
+        val channel = _state.value.playing.streamId
+        silenceJob = scope.launch {
+            var playingFor = 0L
+            while (_state.value.playing.streamId == channel) {
+                delay(500)
+                if (!player.isPlaying) continue
+                playingFor += 500
+                if (playingFor < SILENT_MS) continue
+                val noSoundTrack = player.currentTracks.groups.none { it.type == C.TRACK_TYPE_AUDIO }
+                if (noSoundTrack || silence.silentFor(SILENT_MS)) {
+                    onSilent()
+                    return@launch
+                }
+                // Sound for a while: whatever was skipped before doesn't count any more.
+                if (playingFor >= 3 * SILENT_MS) silentSkips = 0
+            }
+        }
+    }
+
+    private fun onSilent() {
+        if (++silentSkips > _state.value.channels.size.coerceAtMost(MAX_HOPS)) {
+            fail("No channel here has sound right now – they all look off.")
+            return
+        }
+        failOver("there's no sound – it looks off")
     }
 
     private fun armStallWatchdog() {
@@ -399,7 +447,16 @@ class PlayerController(
             // Start playing quickly after a zap; live streams don't benefit from a huge buffer.
             .setBufferDurationsMs(15_000, 50_000, 1_500, 3_000)
             .build()
-        return ExoPlayer.Builder(context)
+        // The decoded sound also goes past the silence meter (unchanged) on its way out.
+        val renderers = object : DefaultRenderersFactory(context) {
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
+                DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .setAudioProcessors(arrayOf(TeeAudioProcessor(silence)))
+                    .build()
+        }
+        return ExoPlayer.Builder(context, renderers)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource, extractors))
             .setLoadControl(loadControl)
             .setAudioAttributes(
@@ -412,6 +469,8 @@ class PlayerController(
 
     private companion object {
         const val MAX_HOPS = 8
+        /** How long a channel may be silent before it counts as off. */
+        const val SILENT_MS = 5_000L
     }
 }
 

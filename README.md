@@ -61,7 +61,7 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   2. The app tries other feeds of the same channel from the catalog. For example, if `US: ESPN HD` is down it plays `ESPN FHD` or `ESPN ᴴᴰ (Backup)`.
   3. If none of those work, it moves to the next channel in the list you're watching. This is why the order of your favorites and lists matters.
 
-  A channel also counts as off if it keeps buffering (8 / 15 / 30 s, set in Settings). Each step can be turned off in **Settings → When a channel is off**.
+  A channel also counts as off if it keeps buffering (8 / 15 / 30 s, set in Settings), or if it plays but has no sound for 5 s: providers' "temporarily unavailable" screens are silent. The sound level is measured on the decoded audio, so when Dolby/DTS goes straight to a soundbar this check simply doesn't apply. Each step can be turned off in **Settings → When a channel is off**.
 - **Live preview while browsing** (TV, tablet, landscape phone): a preview pane next to channel lists and the TV guide plays the selected channel. On a remote, moving through the list previews the focused channel after a short pause and **OK** opens full screen. On touch, the first tap previews and a second tap (or a tap on the preview) opens full screen. The preview hands its stream over before full screen starts, so it works with a 1-connection account. It can be turned off in Settings → Display.
 - **Display**: Settings → *Columns in channel lists* (automatic or 1–4) per device; channel names wrap to two lines.
 - **Crash reports**: if the app crashes (or a background job fails), the next start shows a banner with **Share report**, so the error can be sent and fixed.

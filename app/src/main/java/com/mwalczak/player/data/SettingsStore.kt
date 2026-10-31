@@ -34,6 +34,7 @@ class SettingsStore(private val context: Context) {
         val tryAlternates = booleanPreferencesKey("try_alternates")
         val nextInList = booleanPreferencesKey("next_in_list")
         val stallTimeout = intPreferencesKey("stall_timeout_sec")
+        val skipSilent = booleanPreferencesKey("skip_silent")
         val epgUrl = stringPreferencesKey("epg_url")
         val epgEnabled = booleanPreferencesKey("epg_enabled")
         val epgSources = stringPreferencesKey("epg_sources")
@@ -105,6 +106,7 @@ class SettingsStore(private val context: Context) {
             tryAlternates = p[Keys.tryAlternates] ?: defaults.tryAlternates,
             nextInList = p[Keys.nextInList] ?: defaults.nextInList,
             stallTimeoutSec = p[Keys.stallTimeout] ?: defaults.stallTimeoutSec,
+            skipSilent = p[Keys.skipSilent] ?: defaults.skipSilent,
         )
     }
 
@@ -135,6 +137,7 @@ class SettingsStore(private val context: Context) {
             it[Keys.tryAlternates] = updated.tryAlternates
             it[Keys.nextInList] = updated.nextInList
             it[Keys.stallTimeout] = updated.stallTimeoutSec
+            it[Keys.skipSilent] = updated.skipSilent
         }
     }
 
