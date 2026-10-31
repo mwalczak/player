@@ -134,7 +134,11 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
     // before leaving the app.
     var tab by rememberSaveable { mutableStateOf(Tab.Start) }
     // Back from a list or category goes to Home (Back from the player returns to the list as before).
-    remember { if (actions.takeReturnHome()) tab = Tab.Start }
+    val returnedHome = remember { mutableStateOf(actions.takeReturnHome()) }
+    if (returnedHome.value) {
+        returnedHome.value = false
+        tab = Tab.Start
+    }
     var confirmingExit by remember { mutableStateOf(false) }
     BackHandler { if (tab != Tab.Start) tab = Tab.Start else confirmingExit = true }
     if (confirmingExit) {
