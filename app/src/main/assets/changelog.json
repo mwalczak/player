@@ -60,5 +60,13 @@
     "items": [
       "Hidden categories fold away in Settings: tap “N hidden categories” to see them and unhide"
     ]
+  },
+  {
+    "id": 7,
+    "date": "2026-11-01",
+    "title": "Keep watching in a small window",
+    "items": [
+      "On the phone and tablet, going to the home screen while watching keeps the channel playing in a small floating window, with ⏮ ⏭, close and full screen"
+    ]
   }
 ]

@@ -221,9 +221,26 @@ private fun PlayerContent(
     }
 
     DisposableEffect(Unit) {
+        // Going home from here shrinks the picture into a small window (phone, tablet).
+        container.inPlayer.value = true
         onDispose {
+            container.inPlayer.value = false
             container.remote.nowPlaying.value = null
             controller.release()
+        }
+    }
+    // ⏮ / ⏭ on the small window.
+    LaunchedEffect(Unit) {
+        container.pictureInPictureCommands.collect { if (it == "next") controller.next() else controller.previous() }
+    }
+    // In the small window only the picture shows: no controls, panels, badges or labels.
+    val pip by container.inPictureInPicture.collectAsStateWithLifecycle()
+    LaunchedEffect(pip) {
+        if (pip) {
+            overlay = false
+            panel = false
+            schedule = false
+            feeds = false
         }
     }
 
@@ -376,7 +393,7 @@ private fun PlayerContent(
 
         when (val status = state.status) {
             PlaybackStatus.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-            is PlaybackStatus.Failed -> FailurePanel(
+            is PlaybackStatus.Failed -> if (!pip) FailurePanel(
                 message = status.message,
                 onRetry = { controller.select(state.index) },
                 onNext = { controller.next() },
@@ -386,7 +403,7 @@ private fun PlayerContent(
         }
 
         AnimatedVisibility(
-            visible = state.notice != null,
+            visible = state.notice != null && !pip,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 72.dp),
@@ -410,7 +427,7 @@ private fun PlayerContent(
             }
             pausedJustNow = false
         }
-        state.autoplay?.takeIf { !it.paused || overlay || pausedJustNow }?.let { autoplay ->
+        state.autoplay?.takeIf { (!it.paused || overlay || pausedJustNow) && !pip }?.let { autoplay ->
             AutoplayBadge(autoplay, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = 72.dp, end = 16.dp))
         }
 
@@ -427,7 +444,7 @@ private fun PlayerContent(
             channelLabel = false
         }
         AnimatedVisibility(
-            visible = channelLabel && !overlay,
+            visible = channelLabel && !overlay && !pip,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(16.dp),

@@ -12,6 +12,7 @@ import com.mwalczak.player.data.sync.SyncClient
 import com.mwalczak.player.data.sync.SyncManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import com.mwalczak.player.data.withoutHidden
@@ -89,6 +90,15 @@ class AppContainer(context: Context) {
             .distinctUntilChanged()
             .mapLatest { (all, hidden) -> all?.let { withContext(Dispatchers.Default) { it.withoutHidden(hidden) } } }
             .stateIn(appScope, SharingStarted.Eagerly, null)
+
+    /** True while the player screen is open: going home then shrinks it into a small window (phone, tablet). */
+    val inPlayer = MutableStateFlow(false)
+
+    /** True while the app is shown as that small window (picture-in-picture). */
+    val inPictureInPicture = MutableStateFlow(false)
+
+    /** ⏮ / ⏭ pressed on the small window: "previous" or "next". */
+    val pictureInPictureCommands = MutableSharedFlow<String>(extraBufferCapacity = 4)
 
     /** A channel to open (bunnyplayer://play/<id> from a reminder or the TV home screen), until it's played. */
     val openChannel = MutableStateFlow<Int?>(null)
