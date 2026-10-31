@@ -11,6 +11,8 @@ import com.mwalczak.player.data.sync.SyncManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -66,6 +68,18 @@ class AppContainer(context: Context) {
     val remote = RemoteControl(context, httpClient, settings, catalog, library, appScope)
     val epg = EpgRepository(context, httpClient, xtream, appScope)
     val sync = SyncManager(context, SyncClient(httpClient), settings, library, catalog, appScope)
+
+    init {
+        // The provider renumbers its categories when one is added or removed: keep pins (and
+        // favorites and lists) on the same things by name whenever the catalog or library changes.
+        appScope.launch {
+            catalog.state.map { (it as? CatalogState.Ready)?.catalog }.filterNotNull().distinctUntilChanged()
+                .collect { library.fitTo(it, channelsToo = true) }
+        }
+        appScope.launch {
+            library.library.collect { catalog.catalog?.let { c -> library.fitTo(c, channelsToo = false) } }
+        }
+    }
 
     /** Current time in epoch seconds, ticking every 30 s, for "now" lines and progress bars. */
     val clock: StateFlow<Long> = flow {

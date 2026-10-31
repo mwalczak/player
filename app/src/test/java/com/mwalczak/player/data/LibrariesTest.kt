@@ -33,4 +33,25 @@ class LibrariesTest {
         val remapped = Libraries.remap(imported, catalog)
         assertEquals(listOf(100, 200, 7), remapped.favorites.map { it.streamId })
     }
+
+    @Test
+    fun `pins follow their category's name when the provider renumbers categories`() {
+        // Before: Poland was 83. A category was removed, so now Poland is 82 and 83 is Portugal.
+        val pinned = Library(pinnedCategories = listOf("83", "40"), pinnedNames = mapOf("83" to "Poland", "40" to "UK Sports"))
+        val now = listOf(Category("40", "UK Sports"), Category("82", "Poland"), Category("83", "Portugal"))
+        assertEquals(listOf("Poland", "UK Sports"), pinned.pinnedIn(now).map { it.name })
+
+        val fitted = pinned.fitPinned(now)
+        assertEquals(listOf("82", "40"), fitted.pinnedCategories)
+        assertEquals(mapOf("82" to "Poland", "40" to "UK Sports"), fitted.pinnedNames)
+        assertEquals(fitted, fitted.fitPinned(now))
+    }
+
+    @Test
+    fun `old pins without names get them, and pins whose category is gone are dropped`() {
+        val old = Library(pinnedCategories = listOf("82", "999"))
+        val fitted = old.fitPinned(listOf(Category("82", "Poland")))
+        assertEquals(listOf("82"), fitted.pinnedCategories)
+        assertEquals(mapOf("82" to "Poland"), fitted.pinnedNames)
+    }
 }

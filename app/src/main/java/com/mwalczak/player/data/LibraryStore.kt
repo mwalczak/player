@@ -6,7 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -29,7 +29,28 @@ data class Library(
     val recent: List<Channel> = emptyList(),
     /** Category ids shown at the top of Live TV, in pin order. */
     val pinnedCategories: List<String> = emptyList(),
+    /**
+     * Name of each pinned category (by id). The provider renumbers its categories when one is
+     * added or removed, so names are what identifies them; ids are updated to match (see [fitPinned]).
+     */
+    val pinnedNames: Map<String, String> = emptyMap(),
 )
+
+/** The pinned categories as they are in [categories]: found by name (ids change), by id for old pins without one. */
+fun Library.pinnedIn(categories: List<Category>): List<Category> {
+    val byName = categories.groupBy { it.name }
+    val byId = categories.associateBy { it.id }
+    return pinnedCategories.mapNotNull { id ->
+        val name = pinnedNames[id]
+        if (name != null) byName[name]?.let { same -> same.firstOrNull { it.id == id } ?: same.first() } else byId[id]
+    }.distinct()
+}
+
+/** Pins pointed at the current ids (and old pins given their names), dropping pins whose category is gone. */
+fun Library.fitPinned(categories: List<Category>): Library {
+    val pinned = pinnedIn(categories)
+    return copy(pinnedCategories = pinned.map { it.id }, pinnedNames = pinned.associate { it.id to it.name })
+}
 
 /** Favorites, user lists and recently watched channels, persisted as a small JSON file. */
 class LibraryStore(context: Context, private val scope: CoroutineScope) {
@@ -72,8 +93,26 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
 
     fun reorderList(listId: String, order: List<Channel>) = updateList(listId) { it.copy(channels = it.channels.inOrderOf(order)) }
 
-    fun togglePinnedCategory(id: String) = update { lib ->
-        lib.copy(pinnedCategories = if (id in lib.pinnedCategories) lib.pinnedCategories - id else lib.pinnedCategories + id)
+    fun togglePinnedCategory(category: Category) = update { lib ->
+        val pinnedAs = lib.pinnedCategories.filter { id -> lib.pinnedNames[id]?.let { it == category.name } ?: (id == category.id) }
+        if (pinnedAs.isNotEmpty()) {
+            lib.copy(pinnedCategories = lib.pinnedCategories - pinnedAs.toSet(), pinnedNames = lib.pinnedNames - pinnedAs.toSet())
+        } else {
+            lib.copy(
+                pinnedCategories = lib.pinnedCategories.filterNot { it == category.id } + category.id,
+                pinnedNames = lib.pinnedNames + (category.id to category.name),
+            )
+        }
+    }
+
+    /**
+     * Keeps favorites, lists and pins pointing at the same things after the provider renumbered
+     * its catalog: pins follow their category's name, channels whose id now has another name
+     * follow theirs. Does nothing when everything already matches.
+     */
+    fun fitTo(catalog: Catalog, channelsToo: Boolean) = update { lib ->
+        val fitted = lib.fitPinned(catalog.categories)
+        if (channelsToo) Libraries.remap(fitted, catalog.channels) else fitted
     }
 
     /** Replaces everything, e.g. with favorites and lists copied from the phone. */
@@ -88,7 +127,8 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
     }
 
     private fun update(transform: (Library) -> Library) {
-        _library.update(transform)
+        val before = _library.getAndUpdate(transform)
+        if (_library.value == before) return
         // Always persist the latest snapshot, so a slow earlier write can never overwrite a newer one.
         scope.launch(Dispatchers.IO) { mutex.withLock { write(_library.value) } }
     }

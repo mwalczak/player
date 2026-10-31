@@ -141,7 +141,7 @@ class SyncManagerTest {
         settings.saveCredentials(alice)
         val phone = Device()
         phone.library.toggleFavorite(Channel(1, "TVN"))
-        phone.library.togglePinnedCategory("5")
+        phone.library.togglePinnedCategory(com.mwalczak.player.data.Category("5", "Sport"))
         val list = phone.library.createList("Sport")
         phone.library.toggleInList(list, Channel(7, "Eleven"))
         phone.sync.syncNow()

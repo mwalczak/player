@@ -43,6 +43,7 @@ object Libraries {
             favorites = mine.favorites + imported.favorites.filter { it.streamId !in favoriteIds },
             lists = lists,
             pinnedCategories = (mine.pinnedCategories + imported.pinnedCategories).distinct(),
+            pinnedNames = imported.pinnedNames + mine.pinnedNames,
         )
     }
 

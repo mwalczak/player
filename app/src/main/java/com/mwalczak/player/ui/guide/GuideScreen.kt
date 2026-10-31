@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mwalczak.player.AppContainer
 import com.mwalczak.player.data.Catalog
+import com.mwalczak.player.data.pinnedIn
 import com.mwalczak.player.data.CatalogState
 import com.mwalczak.player.data.Channel
 import com.mwalczak.player.data.epg.Programme
@@ -107,6 +108,8 @@ import java.util.Calendar
 
 private const val FAVORITES = "__favorites__"
 private const val ALL = "__all__"
+/** Prefix of a category's name in the chips' keys. */
+private const val CATEGORY = "category:"
 
 private val ChannelColumn = 150.dp
 private val RowHeight = 64.dp
@@ -125,11 +128,12 @@ fun GuideTab(container: AppContainer, actions: Actions) {
     val epg by container.epg.state.collectAsStateWithLifecycle()
 
     WithCatalog(container, catalogState) { catalog ->
-        val sources = remember(catalog, library.favorites, library.pinnedCategories) {
+        // Categories are kept by name: the provider renumbers them now and then.
+        val sources = remember(catalog, library.favorites, library.pinnedCategories, library.pinnedNames) {
             buildList {
                 if (library.favorites.isNotEmpty()) add(FAVORITES to "Favorites")
-                val pinned = library.pinnedCategories.mapNotNull { id -> catalog.categories.firstOrNull { it.id == id } }
-                (pinned + catalog.categories.filterNot { it in pinned }).forEach { add(it.id to it.name) }
+                val pinned = library.pinnedIn(catalog.categories)
+                (pinned + catalog.categories.filterNot { it in pinned }).forEach { add(CATEGORY + it.name to it.name) }
                 add(ALL to "All channels")
             }
         }
@@ -217,7 +221,7 @@ fun GuideTab(container: AppContainer, actions: Actions) {
 private fun channelsFor(source: String, catalog: Catalog, favorites: List<Channel>): List<Channel> = when (source) {
     FAVORITES -> favorites
     ALL -> catalog.channels
-    else -> catalog.channelsIn(source)
+    else -> catalog.categories.firstOrNull { CATEGORY + it.name == source }?.let { catalog.channelsIn(it.id) }.orEmpty()
 }
 
 @OptIn(ExperimentalFoundationApi::class)

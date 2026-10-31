@@ -85,6 +85,7 @@ import android.content.Intent
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.platform.LocalContext
 import com.mwalczak.player.data.Catalog
+import com.mwalczak.player.data.pinnedIn
 import com.mwalczak.player.data.CatalogState
 import com.mwalczak.player.data.Channel
 import com.mwalczak.player.data.ChannelMatcher
@@ -337,7 +338,9 @@ private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogSta
                     }
                 },
             ) {
-                val pinned = library.pinnedCategories.mapNotNull { id -> catalog.categories.firstOrNull { it.id == id } }.filter { matches(it.name) }
+                val allPinned = remember(library, catalog) { library.pinnedIn(catalog.categories) }
+                val pinnedIds = remember(allPinned) { allPinned.map { it.id }.toSet() }
+                val pinned = allPinned.filter { matches(it.name) }
                 // Back from a category, the remote lands on the card it was opened from.
                 val gridState = rememberLazyGridState()
                 val memory = rememberFocusMemory()
@@ -369,7 +372,7 @@ private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogSta
                                 category.name,
                                 catalog.channelsIn(category.id).size,
                                 pinned = true,
-                                onPin = { container.library.togglePinnedCategory(category.id) },
+                                onPin = { container.library.togglePinnedCategory(category) },
                                 modifier = Modifier.remembered("pinned-${category.id}"),
                             ) { actions.openCategory(category.id) }
                         }
@@ -393,8 +396,8 @@ private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogSta
                         CategoryCard(
                             category.name,
                             catalog.channelsIn(category.id).size,
-                            pinned = category.id in library.pinnedCategories,
-                            onPin = { container.library.togglePinnedCategory(category.id) },
+                            pinned = category.id in pinnedIds,
+                            onPin = { container.library.togglePinnedCategory(category) },
                             modifier = Modifier.remembered(category.id),
                         ) { actions.openCategory(category.id) }
                     }
