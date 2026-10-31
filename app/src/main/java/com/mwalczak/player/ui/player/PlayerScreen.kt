@@ -378,7 +378,8 @@ private fun PlayerContent(
             )
         }
 
-        state.autoplay?.let { autoplay ->
+        // The countdown stays on screen; "paused" only shows with the controls, not over the picture.
+        state.autoplay?.takeIf { !it.paused || overlay }?.let { autoplay ->
             AutoplayBadge(autoplay, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = 72.dp, end = 16.dp))
         }
 
