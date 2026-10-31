@@ -50,6 +50,7 @@ import com.mwalczak.player.ui.common.ChannelGrid
 import com.mwalczak.player.data.sortedByName
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.SortByAlpha
+import androidx.compose.material.icons.filled.Autorenew
 import com.mwalczak.player.ui.common.EmptyState
 import com.mwalczak.player.ui.home.SearchContent
 import com.mwalczak.player.ui.home.WithCatalog
@@ -88,6 +89,7 @@ fun FavoritesTab(container: AppContainer, actions: Actions) {
         emptyText = "No favorites yet. Long-press any channel (or tap its ☆) to add it here.",
         onToggleReorder = { reordering = !reordering },
         onPlay = { index -> actions.play("Favorites", library.favorites, index) },
+        onAutoplay = { actions.play("Favorites", library.favorites, 0, autoplay = true) },
         onMove = container.library::moveFavorite,
         onReorder = container.library::reorderFavorites,
         onRemove = container.library::toggleFavorite,
@@ -105,6 +107,8 @@ private fun OrderedChannelList(
     emptyText: String,
     onToggleReorder: () -> Unit,
     onPlay: (Int) -> Unit,
+    /** Plays the list from the top with autoplay on. */
+    onAutoplay: () -> Unit,
     onMove: (Int, Int) -> Unit,
     /** Puts the channels in this order (A–Z, or back to how they were). */
     onReorder: (List<Channel>) -> Unit,
@@ -128,8 +132,17 @@ private fun OrderedChannelList(
                 "${channels.size} channels",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
             Row {
+                if (!reordering) {
+                    TextButton(onClick = onAutoplay) {
+                        Icon(Icons.Default.Autorenew, null)
+                        Text(" Autoplay")
+                    }
+                }
                 val undo = beforeSort?.takeIf { it != channels && channels == channels.sortedByName() }
                 when {
                     !reordering -> TextButton(onClick = { onPlay(0) }) {
@@ -268,6 +281,7 @@ fun ListDetailScreen(container: AppContainer, actions: Actions, listId: String) 
                 emptyText = "This list is empty. Use “Add channels” to search and add some.",
                 onToggleReorder = { reordering = !reordering },
                 onPlay = { index -> actions.play(list.name, list.channels, index) },
+                onAutoplay = { actions.play(list.name, list.channels, 0, autoplay = true) },
                 onMove = { from, to -> container.library.moveInList(listId, from, to) },
                 onReorder = { container.library.reorderList(listId, it) },
                 onRemove = { container.library.toggleInList(listId, it) },

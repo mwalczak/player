@@ -54,7 +54,23 @@ data class PlayerUiState(
     val epg: List<EpgEntry> = emptyList(),
     /** The channel watched before the current one, for the "last channel" button. */
     val previousIndex: Int? = null,
+    /** Autoplay going through the list; null when off. */
+    val autoplay: Autoplay? = null,
 )
+
+/** Autoplay: the next channel comes on when [secondsLeft] reaches zero (unless [paused]). */
+data class Autoplay(val secondsLeft: Int, val paused: Boolean = false) {
+    /**
+     * One second later: the new countdown, or null when it's time for the next channel. The clock
+     * runs while a channel is on (or has failed), not while it's loading; a channel that doesn't
+     * work isn't worth the full wait.
+     */
+    fun tick(status: PlaybackStatus): Autoplay? {
+        if (paused || status is PlaybackStatus.Loading) return this
+        val left = if (status is PlaybackStatus.Failed) minOf(secondsLeft, 3) - 1 else secondsLeft - 1
+        return if (left <= 0) null else copy(secondsLeft = left)
+    }
+}
 
 /**
  * Owns the ExoPlayer instance and the zapping / failover logic:
@@ -72,6 +88,9 @@ class PlayerController(
     private val recordRecent: Boolean = true,
 ) {
     var settings: PlaybackSettings = PlaybackSettings()
+
+    /** How long autoplay stays on each channel. */
+    var autoplaySeconds: Int = DEFAULT_AUTOPLAY_SECONDS
 
     val player: ExoPlayer = buildPlayer(context)
 
@@ -99,6 +118,7 @@ class PlayerController(
     private var limitJob: Job? = null
     private var epgJob: Job? = null
     private var noticeJob: Job? = null
+    private var autoplayJob: Job? = null
 
     private val listener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -130,6 +150,31 @@ class PlayerController(
 
     fun previous() = select(_state.value.index - 1)
 
+    /** Turns autoplay on: from now on the next channel comes on every [autoplaySeconds]. */
+    fun startAutoplay() {
+        _state.update { it.copy(autoplay = Autoplay(autoplaySeconds)) }
+        autoplayJob?.cancel()
+        autoplayJob = scope.launch {
+            while (true) {
+                delay(1_000)
+                val autoplay = _state.value.autoplay ?: break
+                val ticked = autoplay.tick(_state.value.status)
+                if (ticked == null) next() else _state.update { it.copy(autoplay = ticked) }
+            }
+        }
+    }
+
+    fun stopAutoplay() {
+        autoplayJob?.cancel()
+        _state.update { it.copy(autoplay = null) }
+    }
+
+    /** Pauses or resumes autoplay; turns it on when it is off. */
+    fun toggleAutoplay() {
+        if (_state.value.autoplay == null) startAutoplay()
+        else _state.update { it.copy(autoplay = it.autoplay?.let { a -> a.copy(paused = !a.paused) }) }
+    }
+
     /** Jumps back to the channel watched before this one (and pressing again comes back). */
     fun last() {
         _state.value.previousIndex?.let(::select)
@@ -142,7 +187,14 @@ class PlayerController(
         failed.clear()
         retried.clear()
         hops = 0
-        _state.update { it.copy(index = wrapped, previousIndex = if (wrapped != it.index) it.index else it.previousIndex) }
+        _state.update {
+            it.copy(
+                index = wrapped,
+                previousIndex = if (wrapped != it.index) it.index else it.previousIndex,
+                // Every channel change (automatic or by hand) gets the full autoplay time.
+                autoplay = it.autoplay?.copy(secondsLeft = autoplaySeconds),
+            )
+        }
         play(channels[wrapped], notice = null)
     }
 
@@ -155,6 +207,7 @@ class PlayerController(
     }
 
     fun release() {
+        autoplayJob?.cancel()
         stallJob?.cancel()
         retryJob?.cancel()
         limitJob?.cancel()
@@ -350,3 +403,5 @@ class PlayerController(
         const val MAX_HOPS = 8
     }
 }
+
+const val DEFAULT_AUTOPLAY_SECONDS = 60

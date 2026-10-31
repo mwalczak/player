@@ -38,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.CalendarViewWeek
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LiveTv
@@ -575,14 +576,21 @@ fun CategoryScreen(container: AppContainer, actions: Actions, categoryId: String
     ) {
         // One compact header row (back, title, filter) to leave the height for channels in landscape.
         ScreenHeader(title, onBack = { actions.backHome() }) {
-            OutlinedTextField(
-                value = filter,
-                onValueChange = { filter = it },
-                placeholder = { Text("Filter ${channels.size} channels") },
-                leadingIcon = { Icon(Icons.Default.Search, null) },
-                singleLine = true,
-                modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = filter,
+                    onValueChange = { filter = it },
+                    placeholder = { Text("Filter ${channels.size} channels") },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f, fill = false).widthIn(max = 420.dp).fillMaxWidth(),
+                )
+                // Plays what's shown (the whole category, or what the filter left) with autoplay on.
+                TextButton(onClick = { actions.play(title, shown, 0, autoplay = true) }, enabled = shown.isNotEmpty()) {
+                    Icon(Icons.Default.Autorenew, null)
+                    Text(" Autoplay")
+                }
+            }
         }
         if (shown.isEmpty()) {
             EmptyState(if (catalog == null && categoryId != RECENT) "Loading channels…" else "No channels here.")

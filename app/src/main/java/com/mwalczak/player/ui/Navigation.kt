@@ -50,9 +50,9 @@ class Actions(
     private val context: Context,
 ) {
     /** Plays locally, or on the TV when one is selected with the cast button. */
-    fun play(title: String, channels: List<Channel>, index: Int) {
+    fun play(title: String, channels: List<Channel>, index: Int, autoplay: Boolean = false) {
         if (channels.isEmpty()) return
-        val queue = PlaybackQueue(title, channels, index.coerceIn(channels.indices))
+        val queue = PlaybackQueue(title, channels, index.coerceIn(channels.indices), autoplay = autoplay)
         val target = container.remote.target.value
         if (target != null) {
             container.appScope.launch {

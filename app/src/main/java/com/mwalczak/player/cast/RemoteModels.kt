@@ -21,6 +21,8 @@ data class RemoteRequest(
     val server: String? = null,
     val username: String? = null,
     val password: String? = null,
+    /** With "play": start with autoplay on. */
+    val autoplay: Boolean = false,
 )
 
 /** What a receiver reports from `GET /status` and after every command. */

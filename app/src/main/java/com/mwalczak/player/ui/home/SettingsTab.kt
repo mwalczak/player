@@ -3,6 +3,7 @@ package com.mwalczak.player.ui.home
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.ui.unit.dp
 import com.mwalczak.player.BuildConfig
@@ -92,6 +93,7 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
         }
     }
     val gridColumns by container.settings.gridColumns.collectAsStateWithLifecycle(0)
+    val autoplaySeconds by container.settings.autoplaySeconds.collectAsStateWithLifecycle(60)
     val previewWhileBrowsing by container.settings.previewWhileBrowsing.collectAsStateWithLifecycle(true)
 
     if (editingEpgUrl) {
@@ -182,6 +184,20 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             supportingContent = { Text("Tap to change (${timeouts.joinToString(" / ") { "$it s" }})") },
             modifier = Modifier.clickable {
                 update { s -> s.copy(stallTimeoutSec = timeouts[(timeouts.indexOf(s.stallTimeoutSec) + 1) % timeouts.size]) }
+            },
+        )
+
+        SectionHeader(startPadding = 16.dp, text = "Autoplay")
+        val autoplayTimes = listOf(30, 60, 120, 300, 600)
+        ListItem(
+            headlineContent = { Text("Change channel every ${autoplayLabel(autoplaySeconds)}") },
+            supportingContent = {
+                Text("Autoplay (next to Play all in favorites, lists and categories) goes through the channels like this. Tap to change (${autoplayTimes.joinToString(" / ") { autoplayLabel(it) }})")
+            },
+            leadingContent = { Icon(Icons.Default.Autorenew, null) },
+            modifier = Modifier.clickable {
+                val next = autoplayTimes[(autoplayTimes.indexOf(autoplaySeconds) + 1) % autoplayTimes.size]
+                scope.launch { container.settings.setAutoplaySeconds(next) }
             },
         )
 
@@ -347,3 +363,6 @@ private fun GuideSourcesDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
+
+/** "30 s", "1 min", "5 min". */
+internal fun autoplayLabel(seconds: Int) = if (seconds < 60) "$seconds s" else "${seconds / 60} min"

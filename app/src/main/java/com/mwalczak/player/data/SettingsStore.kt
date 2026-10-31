@@ -41,6 +41,7 @@ class SettingsStore(private val context: Context) {
         val gridColumns = intPreferencesKey("grid_columns")
         val preview = booleanPreferencesKey("preview_while_browsing")
         val guideSource = stringPreferencesKey("guide_source")
+        val autoplaySeconds = intPreferencesKey("autoplay_seconds")
     }
 
     /** Live preview next to channel lists on wide screens (TV, tablet, landscape phone). */
@@ -48,6 +49,13 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setPreviewWhileBrowsing(enabled: Boolean) {
         context.dataStore.edit { it[Keys.preview] = enabled }
+    }
+
+    /** How long autoplay stays on each channel. */
+    val autoplaySeconds: Flow<Int> = context.dataStore.data.map { it[Keys.autoplaySeconds] ?: 60 }
+
+    suspend fun setAutoplaySeconds(seconds: Int) {
+        context.dataStore.edit { it[Keys.autoplaySeconds] = seconds.coerceIn(10, 3600) }
     }
 
     /** The category last picked in the TV guide on this device (Favorites, a category id, all). */

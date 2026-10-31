@@ -41,6 +41,8 @@ data class PlaybackQueue(
     val startIndex: Int,
     /** Sent from another device (phone -> TV); that device just handed its stream over. */
     val fromRemote: Boolean = false,
+    /** Start with autoplay on: move to the next channel every few minutes (see Settings). */
+    val autoplay: Boolean = false,
 )
 
 class AppContainer(context: Context) {

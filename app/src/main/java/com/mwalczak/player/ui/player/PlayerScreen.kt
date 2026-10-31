@@ -2,6 +2,11 @@
 
 package com.mwalczak.player.ui.player
 
+import kotlinx.coroutines.flow.first
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Autorenew
 import android.content.pm.ActivityInfo
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
@@ -171,9 +176,14 @@ private fun PlayerContent(
         controller.settings = s
         if (!started && cleared) {
             started = true
+            controller.autoplaySeconds = container.settings.autoplaySeconds.first()
             controller.start()
+            if (queue.autoplay) controller.startAutoplay()
         }
     }
+    // A new autoplay time in Settings applies from the next channel.
+    val autoplaySeconds by container.settings.autoplaySeconds.collectAsStateWithLifecycle(DEFAULT_AUTOPLAY_SECONDS)
+    LaunchedEffect(autoplaySeconds) { if (started) controller.autoplaySeconds = autoplaySeconds }
 
     busyWarning?.let { (active, max) ->
         AlertDialog(
@@ -298,6 +308,12 @@ private fun PlayerContent(
                     Key.DirectionUp -> { poke(); focusTopTick++; true }
                     Key.DirectionDown -> { poke(); focusBottomTick++; true }
                     Key.LastChannel -> { controller.last(); poke(); true }
+                    // Play/pause on the remote pauses and resumes autoplay.
+                    Key.MediaPlayPause, Key.MediaPause, Key.MediaPlay -> {
+                        if (state.autoplay != null) controller.toggleAutoplay()
+                        poke()
+                        true
+                    }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> { panel = true; true }
                     Key.Info, Key.Menu -> { poke(); true }
                     else -> false
@@ -361,6 +377,10 @@ private fun PlayerContent(
             )
         }
 
+        state.autoplay?.let { autoplay ->
+            AutoplayBadge(autoplay, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = 72.dp, end = 16.dp))
+        }
+
         AnimatedVisibility(visible = overlay, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
             Overlay(
                 focusTopTick = focusTopTick,
@@ -375,11 +395,18 @@ private fun PlayerContent(
                 onResize = { resizeIndex = (resizeIndex + 1) % resizeModes.size; poke() },
                 onList = { panel = true },
                 onSchedule = { schedule = true },
+                onAutoplay = { controller.toggleAutoplay(); poke() },
+                onStopAutoplay = { controller.stopAutoplay(); poke() },
                 castButton = {
                     // Hand the channel being watched over to the TV and stop playing here.
                     CastButton(container, tint = Color.White) { device ->
                         scope.launch {
-                            val queue = com.mwalczak.player.PlaybackQueue(state.queueTitle, state.channels, state.index)
+                            val queue = com.mwalczak.player.PlaybackQueue(
+                                state.queueTitle,
+                                state.channels,
+                                state.index,
+                                autoplay = state.autoplay?.paused == false,
+                            )
                             container.remote.play(device, queue)
                                 .onSuccess { onExit() }
                                 .onFailure {
@@ -439,6 +466,8 @@ private fun Overlay(
     onResize: () -> Unit,
     onList: () -> Unit,
     onSchedule: () -> Unit,
+    onAutoplay: () -> Unit,
+    onStopAutoplay: () -> Unit,
     castButton: @Composable () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
@@ -486,6 +515,28 @@ private fun Overlay(
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                 )
+            }
+            // Autoplay: start / pause / resume, and turn off while it's on.
+            val autoplay = state.autoplay
+            IconButton(onClick = onAutoplay, enabled = state.channels.size > 1, modifier = Modifier.focusRing()) {
+                Icon(
+                    when {
+                        autoplay == null -> Icons.Default.Autorenew
+                        autoplay.paused -> Icons.Default.PlayArrow
+                        else -> Icons.Default.Pause
+                    },
+                    when {
+                        autoplay == null -> "Start autoplay"
+                        autoplay.paused -> "Resume autoplay"
+                        else -> "Pause autoplay"
+                    },
+                    tint = if (autoplay != null) MaterialTheme.colorScheme.primary else Color.White,
+                )
+            }
+            if (autoplay != null) {
+                IconButton(onClick = onStopAutoplay, modifier = Modifier.focusRing()) {
+                    Icon(Icons.Default.Close, "Turn autoplay off", tint = Color.White)
+                }
             }
             IconButton(onClick = onFavorite, modifier = Modifier.focusRequester(topFocus).focusRing()) {
                 Icon(
@@ -723,5 +774,30 @@ private fun FullscreenLandscape() {
             insets.show(WindowInsetsCompat.Type.systemBars())
             activity.requestedOrientation = previousOrientation
         }
+    }
+}
+
+/** Shown while autoplay is on: when the next channel comes, or that it's paused. */
+@Composable
+private fun AutoplayBadge(autoplay: Autoplay, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .background(Color(0xCC000000), RoundedCornerShape(20.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(
+            if (autoplay.paused) Icons.Default.Pause else Icons.Default.Autorenew,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp),
+        )
+        val left = autoplay.secondsLeft
+        Text(
+            if (autoplay.paused) "Autoplay paused" else "Next in ${left / 60}:${"%02d".format(left % 60)}",
+            color = Color.White,
+            style = MaterialTheme.typography.labelLarge,
+        )
     }
 }
