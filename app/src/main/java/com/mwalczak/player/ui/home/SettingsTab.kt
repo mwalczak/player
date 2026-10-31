@@ -1,5 +1,7 @@
 package com.mwalczak.player.ui.home
 
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.ui.platform.LocalContext
 import com.mwalczak.player.ui.common.WhatsNewDialog
 import com.mwalczak.player.data.Changelog
@@ -187,7 +189,17 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             leadingContent = { Icon(Icons.Default.VisibilityOff, null) },
             modifier = Modifier.clickable(enabled = readyCatalog != null) { choosingHidden = true },
         )
-        hidden.forEach { name ->
+        // The hidden ones fold away: the list gets long.
+        var showHidden by remember { mutableStateOf(false) }
+        if (hidden.isNotEmpty()) {
+            ListItem(
+                headlineContent = { Text("${hidden.size} hidden ${if (hidden.size == 1) "category" else "categories"}") },
+                supportingContent = { Text(if (showHidden) "Tap to fold away" else "Tap to see them and unhide") },
+                trailingContent = { Icon(if (showHidden) Icons.Default.ExpandLess else Icons.Default.ExpandMore, if (showHidden) "Fold away" else "Show") },
+                modifier = Modifier.clickable { showHidden = !showHidden },
+            )
+        }
+        if (showHidden) hidden.forEach { name ->
             ListItem(
                 headlineContent = { Text(name) },
                 trailingContent = {

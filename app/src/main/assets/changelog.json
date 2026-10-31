@@ -52,5 +52,13 @@
       "Hide categories you never watch: long-press one on Live TV, or Settings → Hidden categories",
       "This “What's new” after an update, and the full list in Settings → App"
     ]
+  },
+  {
+    "id": 6,
+    "date": "2026-11-01",
+    "title": "Tidier settings",
+    "items": [
+      "Hidden categories fold away in Settings: tap “N hidden categories” to see them and unhide"
+    ]
   }
 ]
