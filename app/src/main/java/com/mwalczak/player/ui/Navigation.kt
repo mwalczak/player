@@ -1,5 +1,16 @@
 package com.mwalczak.player.ui
 
+import java.util.Date
+import java.text.DateFormat
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.filterNotNull
+import com.mwalczak.player.data.CatalogState
+import com.mwalczak.player.data.reminders.Reminder
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -127,6 +138,54 @@ fun AppNavigation(container: AppContainer) {
     if (startDestination == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         return
+    }
+
+    // bunnyplayer://play/<id> (a reminder's "Watch", the TV home screen): play it, within the
+    // favorites when it's one of them so ◀ ▶ go on from there.
+    LaunchedEffect(Unit) {
+        container.openChannel.filterNotNull().collect { streamId ->
+            container.openChannel.value = null
+            if (container.settings.currentCredentials() == null) return@collect
+            val favorites = container.library.library.value.favorites
+            val index = favorites.indexOfFirst { it.streamId == streamId }
+            if (index >= 0) {
+                actions.play("Favorites", favorites, index)
+            } else {
+                val catalog = withTimeoutOrNull(30_000) {
+                    container.catalog.state.filterIsInstance<CatalogState.Ready>().first().catalog
+                }
+                catalog?.channels?.firstOrNull { it.streamId == streamId }?.let { actions.play(it.name, listOf(it), 0) }
+            }
+        }
+    }
+
+    // A reminder going off while the app is open: switch, or ask.
+    var dueReminder by remember { mutableStateOf<Reminder?>(null) }
+    LaunchedEffect(Unit) {
+        container.reminders.due.collect { reminder ->
+            container.reminders.consumed()
+            if (reminder.autoSwitch) {
+                Toast.makeText(context, "${reminder.title} – switching to ${reminder.channel.name}", Toast.LENGTH_LONG).show()
+                container.openChannel.value = reminder.channel.streamId
+            } else {
+                dueReminder = reminder
+            }
+        }
+    }
+    dueReminder?.let { reminder ->
+        val time = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
+        AlertDialog(
+            onDismissRequest = { dueReminder = null },
+            title = { Text(reminder.title) },
+            text = { Text("Starts at ${time.format(Date(reminder.start * 1000))} on ${reminder.channel.name}.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    dueReminder = null
+                    container.openChannel.value = reminder.channel.streamId
+                }) { Text("Watch") }
+            },
+            dismissButton = { TextButton(onClick = { dueReminder = null }) { Text("Not now") } },
+        )
     }
 
     // Channels sent from a phone (this device acting as the TV).

@@ -1,5 +1,8 @@
 package com.mwalczak.player.ui.guide
 
+import com.mwalczak.player.ui.common.Show
+import com.mwalczak.player.ui.common.ReminderDialog
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -248,6 +251,11 @@ private fun GuideGrid(
 
     // Remote navigation keeps a time cursor: ▲/▼ go to whatever is on at that time in the row
     // above/below (not to whichever cell happens to be nearest on screen), ◀/▶ move it along.
+    // Long-press a show that hasn't started: reminder.
+    val reminders by container.reminders.reminders.collectAsStateWithLifecycle()
+    var reminding by remember { mutableStateOf<Show?>(null) }
+    reminding?.let { ReminderDialog(container, it, onDismiss = { reminding = null }) }
+
     var cursorSec by rememberSaveable { mutableLongStateOf(maxOf(System.currentTimeMillis() / 1000, windowStart)) }
     var movingVertically by remember { mutableStateOf(false) }
     val requesters = remember { HashMap<Int, FocusRequester>() }
@@ -347,6 +355,8 @@ private fun GuideGrid(
                                 cursorSec = cursorSec,
                                 cursorRequester = requester(index),
                                 onCellFocused = { cellStart -> if (!movingVertically) cursorSec = maxOf(cellStart, visibleStartSec()) },
+                                hasReminder = { start -> reminders.any { it.channel.streamId == channel.streamId && it.start == start } },
+                                onRemind = { p -> reminding = Show(channel, p.title, p.start, p.stop) },
                             ) {
                                 onPlay(index)
                             }
@@ -424,6 +434,8 @@ private fun ProgrammeCells(
     cursorSec: Long,
     cursorRequester: FocusRequester,
     onCellFocused: (startSec: Long) -> Unit,
+    hasReminder: (startSec: Long) -> Boolean,
+    onRemind: (Programme) -> Unit,
     onClick: () -> Unit,
 ) {
     val visible = programmes.filter { it.stop > windowStart && it.start < windowEnd }
@@ -454,7 +466,9 @@ private fun ProgrammeCells(
                 onAir = p.start <= now && now < p.stop,
                 dim = p.stop <= now,
                 modifier = if (p === target) Modifier.focusRequester(cursorRequester) else Modifier,
+                reminder = hasReminder(p.start),
                 onFocused = { onCellFocused(cellStart) },
+                onLongClick = if (p.start > now) ({ onRemind(p) }) else null,
                 onClick = onClick,
             )
             cursor = stop
@@ -463,6 +477,7 @@ private fun ProgrammeCells(
     if (cursor < windowEnd) Spacer(Modifier.width(widthOf(windowEnd - cursor)))
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun GuideCell(
     width: Dp,
@@ -471,7 +486,10 @@ private fun GuideCell(
     onAir: Boolean,
     dim: Boolean,
     modifier: Modifier = Modifier,
+    reminder: Boolean = false,
     onFocused: () -> Unit,
+    /** Long-press (or long OK on a remote): set a reminder; only for shows that haven't started. */
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -485,7 +503,7 @@ private fun GuideCell(
             .clip(shape)
             .background(if (onAir) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer)
             .focusHighlight(interaction, shape)
-            .clickable(interactionSource = interaction, indication = LocalIndication.current, onClick = onClick)
+            .combinedClickable(interactionSource = interaction, indication = LocalIndication.current, onLongClick = onLongClick, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.Center,
     ) {
@@ -499,13 +517,19 @@ private fun GuideCell(
             overflow = TextOverflow.Ellipsis,
         )
         if (time != null) {
-            Text(time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            Text(
+                if (reminder) "🔔 $time" else time,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (reminder) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
         }
     }
 }
 
 private fun widthOf(seconds: Long): Dp = PerMinute * (seconds / 60f)
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun GuideSearchResults(
     container: AppContainer,
@@ -516,6 +540,9 @@ private fun GuideSearchResults(
     actions: Actions,
 ) {
     var hits by remember { mutableStateOf<List<GuideHit>>(emptyList()) }
+    val reminders by container.reminders.reminders.collectAsStateWithLifecycle()
+    var reminding by remember { mutableStateOf<Show?>(null) }
+    reminding?.let { ReminderDialog(container, it, onDismiss = { reminding = null }) }
     LaunchedEffect(query, version) {
         delay(250)
         hits = container.epg.search(query, channels, System.currentTimeMillis() / 1000)
@@ -540,15 +567,23 @@ private fun GuideSearchResults(
                             .clip(CardShape)
                             .background(if (onAir) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer)
                             .focusHighlight(interaction)
-                            .clickable(interactionSource = interaction, indication = LocalIndication.current) {
+                            .combinedClickable(
+                                interactionSource = interaction,
+                                indication = LocalIndication.current,
+                                // Long-press a show that hasn't started: reminder.
+                                onLongClick = if (hit.programme.start > now) ({
+                                    reminding = Show(hit.channel, hit.programme.title, hit.programme.start, hit.programme.stop)
+                                }) else null,
+                            ) {
                                 actions.play("Search: $query", queue, queue.indexOfFirst { it.streamId == hit.channel.streamId })
                             }
                             .padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        val reminded = reminders.any { it.channel.streamId == hit.channel.streamId && it.start == hit.programme.start }
                         Text(
-                            whenLabel(hit.programme, now, time),
+                            (if (reminded) "🔔 " else "") + whenLabel(hit.programme, now, time),
                             style = MaterialTheme.typography.labelLarge,
                             color = if (onAir) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.width(110.dp),

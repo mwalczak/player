@@ -161,6 +161,9 @@ private fun PlayerContent(
     var panel by remember { mutableStateOf(false) }
     var schedule by remember { mutableStateOf(false) }
     var feeds by remember { mutableStateOf(false) }
+    val reminders by container.reminders.reminders.collectAsStateWithLifecycle()
+    var reminding by remember { mutableStateOf<com.mwalczak.player.ui.common.Show?>(null) }
+    reminding?.let { com.mwalczak.player.ui.common.ReminderDialog(container, it, onDismiss = { reminding = null }) }
     var resizeIndex by remember { mutableIntStateOf(0) }
     var interaction by remember { mutableIntStateOf(0) }
     val focus = remember { FocusRequester() }
@@ -504,7 +507,11 @@ private fun PlayerContent(
             exit = slideOutHorizontally { it },
             modifier = Modifier.align(Alignment.CenterEnd),
         ) {
-            SchedulePanel(state)
+            SchedulePanel(
+                state,
+                hasReminder = { start -> reminders.any { it.channel.streamId == state.playing.streamId && it.start == start } },
+                onRemind = { entry -> reminding = com.mwalczak.player.ui.common.Show(state.playing, entry.title, entry.startEpochSec, entry.endEpochSec) },
+            )
         }
     }
 
@@ -707,7 +714,7 @@ private fun Modifier.focusRing(): Modifier {
 }
 
 @Composable
-private fun SchedulePanel(state: PlayerUiState) {
+private fun SchedulePanel(state: PlayerUiState, hasReminder: (startSec: Long) -> Boolean, onRemind: (EpgEntry) -> Unit) {
     val time = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
     val now = System.currentTimeMillis() / 1000
     val first = remember { FocusRequester() }
@@ -744,12 +751,15 @@ private fun SchedulePanel(state: PlayerUiState) {
                     .fillMaxWidth()
                     .then(if (index == 0) Modifier.focusRequester(first) else Modifier)
                     .background(if (onAir) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                    .focusable()
+                    // OK on a show that hasn't started: reminder.
+                    .then(if (entry.startEpochSec > now) Modifier.clickable { onRemind(entry) } else Modifier.focusable())
                     .padding(horizontal = 16.dp, vertical = 10.dp),
             ) {
+                val reminded = hasReminder(entry.startEpochSec)
                 Text(
-                    "${time.format(Date(entry.startEpochSec * 1000))} – ${time.format(Date(entry.endEpochSec * 1000))}",
-                    color = Color.White.copy(alpha = 0.7f),
+                    (if (reminded) "🔔 " else "") +
+                        "${time.format(Date(entry.startEpochSec * 1000))} – ${time.format(Date(entry.endEpochSec * 1000))}",
+                    color = if (reminded) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
                     style = MaterialTheme.typography.labelMedium,
                 )
                 Text(entry.title, color = Color.White, fontWeight = if (onAir) FontWeight.SemiBold else FontWeight.Normal)

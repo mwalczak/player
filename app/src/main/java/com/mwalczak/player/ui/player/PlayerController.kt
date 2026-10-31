@@ -278,7 +278,10 @@ class PlayerController(
         stallJob?.cancel()
         if (_state.value.status != PlaybackStatus.Playing) watchForSilence()
         val current = _state.value
-        if (recordRecent && current.status != PlaybackStatus.Playing) container.library.addRecent(current.playing)
+        if (recordRecent && current.status != PlaybackStatus.Playing) {
+            container.library.addRecent(current.playing)
+            container.tvHome.watched(current.playing)
+        }
         failed.clear()
         retried.clear()
         hops = 0

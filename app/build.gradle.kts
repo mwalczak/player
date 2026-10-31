@@ -67,6 +67,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
+    // Favorites on the TV home screen, last channel in "Continue watching".
+    implementation(libs.androidx.tvprovider)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

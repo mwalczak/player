@@ -6,10 +6,13 @@ import com.mwalczak.player.cast.RemoteControl
 import com.mwalczak.player.data.CatalogRepository
 import com.mwalczak.player.data.CatalogState
 import com.mwalczak.player.data.epg.EpgRepository
+import com.mwalczak.player.data.reminders.ReminderStore
+import com.mwalczak.player.data.tvhome.TvHome
 import com.mwalczak.player.data.sync.SyncClient
 import com.mwalczak.player.data.sync.SyncManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
@@ -69,6 +72,11 @@ class AppContainer(context: Context) {
     val updater = Updater(context, httpClient, appScope, BuildConfig.VERSION_CODE)
     val remote = RemoteControl(context, httpClient, settings, catalog, library, appScope)
     val epg = EpgRepository(context, httpClient, xtream, appScope)
+    val reminders = ReminderStore(context, appScope).also { it.reschedule() }
+    val tvHome = TvHome(context, appScope)
+
+    /** A channel to open (bunnyplayer://play/<id> from a reminder or the TV home screen), until it's played. */
+    val openChannel = MutableStateFlow<Int?>(null)
     val sync = SyncManager(context, SyncClient(httpClient), settings, library, catalog, appScope)
 
     init {
@@ -80,6 +88,12 @@ class AppContainer(context: Context) {
         }
         appScope.launch {
             library.library.collect { catalog.catalog?.let { c -> library.fitTo(c, channelsToo = false) } }
+        }
+        // Favorites as the app's row on the TV home screen.
+        if (tvHome.supported) {
+            appScope.launch {
+                library.library.map { it.favorites }.distinctUntilChanged().collect { tvHome.publishFavorites(it) }
+            }
         }
     }
 

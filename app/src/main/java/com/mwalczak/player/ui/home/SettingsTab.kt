@@ -1,5 +1,8 @@
 package com.mwalczak.player.ui.home
 
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Notifications
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.widthIn
@@ -192,6 +195,32 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
                 update { s -> s.copy(stallTimeoutSec = timeouts[(timeouts.indexOf(s.stallTimeoutSec) + 1) % timeouts.size]) }
             },
         )
+
+        SectionHeader(startPadding = 16.dp, text = "Reminders")
+        val reminders by container.reminders.reminders.collectAsStateWithLifecycle()
+        if (reminders.isEmpty()) {
+            ListItem(
+                headlineContent = { Text("No reminders") },
+                supportingContent = { Text("Long-press a show that hasn't started (in the TV guide, its search or the player's schedule) to be reminded or switched to it") },
+                leadingContent = { Icon(Icons.Default.Notifications, null) },
+            )
+        }
+        val reminderTime = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
+        reminders.forEach { reminder ->
+            ListItem(
+                headlineContent = { Text(reminder.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                supportingContent = {
+                    Text(
+                        "${reminderTime.format(Date(reminder.start * 1000))} · ${reminder.channel.name} · " +
+                            if (reminder.autoSwitch) "switches automatically" else "reminds 2 min before",
+                    )
+                },
+                leadingContent = { Icon(if (reminder.autoSwitch) Icons.Default.Autorenew else Icons.Default.Notifications, null) },
+                trailingContent = {
+                    IconButton(onClick = { container.reminders.remove(reminder) }) { Icon(Icons.Default.Delete, "Remove reminder") }
+                },
+            )
+        }
 
         SectionHeader(startPadding = 16.dp, text = "Autoplay")
         val autoplayTimes = listOf(30, 60, 120, 300, 600)
