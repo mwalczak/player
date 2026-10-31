@@ -83,6 +83,17 @@ class Actions(
     fun openPicker(listId: String) = nav.navigate(Routes.picker(listId))
     fun back() = nav.popBackStack()
 
+    /** Leaves a list or category for the Home page, not the tab it was opened from. */
+    fun backHome() {
+        returnHome = true
+        nav.popBackStack()
+    }
+
+    private var returnHome = false
+
+    /** True once after [backHome]: the home screen then shows Home. */
+    fun takeReturnHome(): Boolean = returnHome.also { returnHome = false }
+
     fun loggedOut() = nav.navigate(Routes.LOGIN) { popUpTo(0) }
     fun loggedIn() = nav.navigate(Routes.HOME) { popUpTo(0) }
 }

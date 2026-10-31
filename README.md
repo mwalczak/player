@@ -29,7 +29,7 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   - Channels are matched by the provider's own EPG id first, then by name. mybunny's own guide fills gaps, favorites first.
   - The guide is stored in an on-device database, so even very large channel lists stay fast. For now it downloads **only when you tap Settings → TV guide → Download guide now** (Wi-Fi only by default).
   - Settings → TV guide lets you pick guides by hand, allow mobile data, or add an extra XMLTV URL.
-- **Home** is the first page: tiles for Favorites, each of your lists and your pinned categories. Tap a tile to start watching it from its first channel, or ≡ to open it. Back from any other tab returns to Home; Back on Home asks before leaving the app.
+- **Home** is the first page: tiles for Favorites, each of your lists and your pinned categories. Tap a tile to start watching it from its first channel, or ≡ to open it. Back from any other tab, list or category returns to Home (Back from the player still returns to the list you were watching); Back on Home asks before leaving the app.
 - **Live TV** lists all categories, pinned ones on top. The field at the top filters them (any word order, accents ignored, e.g. "pol sport").
 - **Search** across the whole catalog. Matching ignores case and accents and accepts words in any order ("one bbc" finds "UK: BBC One HD").
 - **Favorites** can be reordered: drag a channel by its ≡ handle (on a TV remote: OK on ≡, then ▲/▼, then OK), or tap **A–Z** (with Undo). The order is the zapping and failover order.

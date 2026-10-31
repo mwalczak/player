@@ -1,5 +1,6 @@
 package com.mwalczak.player.ui.lists
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -241,6 +242,7 @@ fun ListDetailScreen(container: AppContainer, actions: Actions, listId: String) 
     var reordering by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
+    BackHandler { if (reordering) reordering = false else actions.backHome() }
 
     Column(
         Modifier
@@ -248,7 +250,7 @@ fun ListDetailScreen(container: AppContainer, actions: Actions, listId: String) 
             .background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        ScreenHeader(list?.name ?: "List", onBack = { actions.back() }) {
+        ScreenHeader(list?.name ?: "List", onBack = { actions.backHome() }) {
             Button(onClick = { actions.openPicker(listId) }) {
                 Icon(Icons.Default.Add, null)
                 Text(" Add channels")
@@ -287,7 +289,7 @@ fun ListDetailScreen(container: AppContainer, actions: Actions, listId: String) 
             confirmButton = {
                 TextButton(onClick = {
                     deleting = false
-                    actions.back()
+                    actions.backHome()
                     container.library.deleteList(listId)
                 }) { Text("Delete") }
             },

@@ -1,6 +1,10 @@
 package com.mwalczak.player.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.remember
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import com.mwalczak.player.ui.lists.ListDetailScreen
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.assertCountEquals
@@ -59,5 +63,29 @@ class HomeBackTest {
         back()
         compose.onNodeWithText("Leave").performClick()
         assertTrue(compose.activity.isFinishing)
+    }
+
+    @Test
+    fun `back from a list opened in My lists goes to Home`() {
+        val container = (compose.activity.application as PlayerApp).container
+        val sport = container.library.createList("Sport")
+        container.library.toggleInList(sport, Channel(2, "Eleven 1"))
+        compose.setContent {
+            val nav = rememberNavController()
+            val context = LocalContext.current
+            val actions = remember(nav) { Actions(nav, container, context) }
+            NavHost(nav, startDestination = Routes.HOME) {
+                composable(Routes.HOME) { HomeScreen(container, actions) }
+                composable(Routes.LIST) { entry -> ListDetailScreen(container, actions, entry.arguments?.getString("id").orEmpty()) }
+            }
+        }
+
+        compose.onAllNodesWithText("My lists")[1].performClick() // the tab, not Home's section title
+        compose.onAllNodesWithText("Bunny Player").assertCountEquals(0)
+        compose.onAllNodesWithText("Sport")[0].performClick()
+        compose.onNodeWithText("Add channels", substring = true).assertExists()
+
+        back()
+        compose.onNodeWithText("Bunny Player").assertExists()
     }
 }

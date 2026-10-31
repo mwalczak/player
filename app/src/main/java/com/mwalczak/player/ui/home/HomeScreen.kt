@@ -133,6 +133,8 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
     // Home is the first page, and Back leads there from every other tab; Back on Home asks
     // before leaving the app.
     var tab by rememberSaveable { mutableStateOf(Tab.Start) }
+    // Back from a list or category goes to Home (Back from the player returns to the list as before).
+    remember { if (actions.takeReturnHome()) tab = Tab.Start }
     var confirmingExit by remember { mutableStateOf(false) }
     BackHandler { if (tab != Tab.Start) tab = Tab.Start else confirmingExit = true }
     if (confirmingExit) {
@@ -530,6 +532,7 @@ fun CategoryScreen(container: AppContainer, actions: Actions, categoryId: String
     val library by container.library.library.collectAsStateWithLifecycle()
     var filter by rememberSaveable { mutableStateOf("") }
     val catalog = (state as? CatalogState.Ready)?.catalog
+    BackHandler { actions.backHome() }
 
     val title = when (categoryId) {
         ALL_CHANNELS -> "All channels"
@@ -567,7 +570,7 @@ fun CategoryScreen(container: AppContainer, actions: Actions, categoryId: String
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
         // One compact header row (back, title, filter) to leave the height for channels in landscape.
-        ScreenHeader(title, onBack = { actions.back() }) {
+        ScreenHeader(title, onBack = { actions.backHome() }) {
             OutlinedTextField(
                 value = filter,
                 onValueChange = { filter = it },
