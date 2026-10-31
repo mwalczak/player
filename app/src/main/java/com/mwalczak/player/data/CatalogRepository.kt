@@ -46,6 +46,18 @@ class Catalog(
     }
 }
 
+/**
+ * The catalog without the categories named in [hidden] (and channels found only in them): what
+ * Live TV, Search and the guide offer. Returns this catalog when nothing is hidden.
+ */
+fun Catalog.withoutHidden(hidden: Collection<String>): Catalog {
+    if (hidden.isEmpty()) return this
+    val names = hidden.toSet()
+    val hiddenIds = categories.filter { it.name in names }.map { it.id }.toSet()
+    if (hiddenIds.isEmpty()) return this
+    return Catalog(categories.filterNot { it.id in hiddenIds }, allRows.filterNot { it.categoryId in hiddenIds }, loadedAtMillis)
+}
+
 sealed interface CatalogState {
     data object Idle : CatalogState
     data object Loading : CatalogState

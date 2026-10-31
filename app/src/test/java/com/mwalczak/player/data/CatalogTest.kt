@@ -34,4 +34,23 @@ class CatalogTest {
         assertEquals(listOf(7), catalog.channelsIn("1").map { it.streamId })
         assertEquals(listOf(7, 8), catalog.channelsIn("128").map { it.streamId })
     }
+
+    @Test
+    fun `hidden categories and their channels are left out, shared channels stay`() {
+        val catalog = Catalog(
+            categories = listOf(Category("1", "Poland"), Category("2", "XXX"), Category("3", "Sports")),
+            allRows = listOf(
+                Channel(1, "TVN", categoryId = "1"),
+                Channel(2, "Adult", categoryId = "2"),
+                Channel(3, "Eurosport", categoryId = "2"),
+                Channel(3, "Eurosport", categoryId = "3"),
+            ),
+            loadedAtMillis = 0,
+        )
+        val visible = catalog.withoutHidden(listOf("XXX", "Not a category"))
+        assertEquals(listOf("Poland", "Sports"), visible.categories.map { it.name })
+        assertEquals(listOf(1, 3), visible.channels.map { it.streamId })
+        assertEquals(emptyList<String>(), visible.search("adult").map { it.name })
+        assertEquals(catalog, catalog.withoutHidden(emptyList()))
+    }
 }

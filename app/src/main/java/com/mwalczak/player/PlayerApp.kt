@@ -14,6 +14,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import com.mwalczak.player.data.withoutHidden
+import com.mwalczak.player.data.Catalog
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.collectLatest
@@ -74,6 +79,16 @@ class AppContainer(context: Context) {
     val epg = EpgRepository(context, httpClient, xtream, appScope)
     val reminders = ReminderStore(context, appScope).also { it.reschedule() }
     val tvHome = TvHome(context, appScope)
+
+    /** The catalog without the hidden categories: what Live TV, Search and the guide offer. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val browsable: StateFlow<Catalog?> =
+        combine(catalog.state, library.library.map { it.hiddenCategories }.distinctUntilChanged()) { state, hidden ->
+            (state as? CatalogState.Ready)?.catalog to hidden
+        }
+            .distinctUntilChanged()
+            .mapLatest { (all, hidden) -> all?.let { withContext(Dispatchers.Default) { it.withoutHidden(hidden) } } }
+            .stateIn(appScope, SharingStarted.Eagerly, null)
 
     /** A channel to open (bunnyplayer://play/<id> from a reminder or the TV home screen), until it's played. */
     val openChannel = MutableStateFlow<Int?>(null)

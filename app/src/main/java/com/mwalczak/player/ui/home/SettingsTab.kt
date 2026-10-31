@@ -1,5 +1,9 @@
 package com.mwalczak.player.ui.home
 
+import com.mwalczak.player.data.ChannelMatcher
+import com.mwalczak.player.data.Category
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Notifications
@@ -95,6 +99,16 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             scope.launch { container.settings.updateEpg(epgSettings.copy(sources = chosen)) }
         }
     }
+    val library by container.library.library.collectAsStateWithLifecycle()
+    var choosingHidden by remember { mutableStateOf(false) }
+    if (choosingHidden) {
+        readyCatalog?.let { catalog ->
+            HiddenCategoriesDialog(catalog.categories, library.hiddenCategories, onDismiss = { choosingHidden = false }) { names ->
+                container.library.setHiddenCategories(names)
+                choosingHidden = false
+            }
+        }
+    }
     val gridColumns by container.settings.gridColumns.collectAsStateWithLifecycle(0)
     val autoplaySeconds by container.settings.autoplaySeconds.collectAsStateWithLifecycle(60)
     val previewWhileBrowsing by container.settings.previewWhileBrowsing.collectAsStateWithLifecycle(true)
@@ -155,6 +169,31 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
             trailingContent = { Switch(checked = previewWhileBrowsing, onCheckedChange = null) },
             modifier = Modifier.clickable { scope.launch { container.settings.setPreviewWhileBrowsing(!previewWhileBrowsing) } },
         )
+
+        SectionHeader(startPadding = 16.dp, text = "Hidden categories")
+        val hidden = library.hiddenCategories
+        ListItem(
+            headlineContent = { Text("Choose categories to hide…") },
+            supportingContent = {
+                Text(
+                    if (hidden.isEmpty()) "Hidden ones are left out of Live TV, Search and the TV guide (not your favorites and lists). Or long-press a category on Live TV."
+                    else "${hidden.size} hidden – left out of Live TV, Search and the TV guide",
+                )
+            },
+            leadingContent = { Icon(Icons.Default.VisibilityOff, null) },
+            modifier = Modifier.clickable(enabled = readyCatalog != null) { choosingHidden = true },
+        )
+        hidden.forEach { name ->
+            ListItem(
+                headlineContent = { Text(name) },
+                trailingContent = {
+                    TextButton(onClick = { container.library.setCategoryHidden(name, false) }) {
+                        Icon(Icons.Default.Visibility, null)
+                        Text(" Unhide")
+                    }
+                },
+            )
+        }
 
         SectionHeader(startPadding = 16.dp, text = "Stream format")
         StreamFormat.entries.forEach { format ->
@@ -401,3 +440,58 @@ private fun GuideSourcesDialog(
 
 /** "30 s", "1 min", "5 min". */
 internal fun autoplayLabel(seconds: Int) = if (seconds < 60) "$seconds s" else "${seconds / 60} min"
+
+/** Every category with a checkbox (and a filter, for 100+ of them): ticked ones are hidden. */
+@Composable
+private fun HiddenCategoriesDialog(
+    categories: List<Category>,
+    hidden: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (List<String>) -> Unit,
+) {
+    var chosen by remember { mutableStateOf(hidden.toSet()) }
+    var filter by remember { mutableStateOf("") }
+    val shown = remember(categories, filter) {
+        val key = ChannelMatcher.searchKey(filter).trim()
+        categories.distinctBy { it.name }.filter { key.isEmpty() || ChannelMatcher.searchKey(it.name).contains(key) }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Hide categories") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = filter,
+                    onValueChange = { filter = it },
+                    placeholder = { Text("Filter ${categories.size} categories") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    "${chosen.size} hidden",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
+                androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 380.dp)) {
+                    items(shown.size) { i ->
+                        val name = shown[i].name
+                        val checked = name in chosen
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { chosen = if (checked) chosen - name else chosen + name }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(checked = checked, onCheckedChange = null)
+                            Text(name, Modifier.padding(start = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(chosen.toList()) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}

@@ -34,6 +34,8 @@ data class Library(
      * added or removed, so names are what identifies them; ids are updated to match (see [fitPinned]).
      */
     val pinnedNames: Map<String, String> = emptyMap(),
+    /** Names of the categories left out of Live TV, Search and the guide (names: ids get renumbered). */
+    val hiddenCategories: List<String> = emptyList(),
 )
 
 /** The pinned categories as they are in [categories]: found by name (ids change), by id for old pins without one. */
@@ -114,6 +116,12 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
         val fitted = lib.fitPinned(catalog.categories)
         if (channelsToo) Libraries.remap(fitted, catalog.channels) else fitted
     }
+
+    fun setCategoryHidden(name: String, hidden: Boolean) = update { lib ->
+        lib.copy(hiddenCategories = if (hidden) (lib.hiddenCategories + name).distinct() else lib.hiddenCategories - name)
+    }
+
+    fun setHiddenCategories(names: List<String>) = update { it.copy(hiddenCategories = names.distinct().sorted()) }
 
     /** Replaces everything, e.g. with favorites and lists copied from the phone. */
     fun replaceAll(library: Library) = update { library }

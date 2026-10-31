@@ -44,6 +44,7 @@ object Libraries {
             lists = lists,
             pinnedCategories = (mine.pinnedCategories + imported.pinnedCategories).distinct(),
             pinnedNames = imported.pinnedNames + mine.pinnedNames,
+            hiddenCategories = (mine.hiddenCategories + imported.hiddenCategories).distinct(),
         )
     }
 

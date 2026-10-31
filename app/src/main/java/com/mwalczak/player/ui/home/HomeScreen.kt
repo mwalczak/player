@@ -1,5 +1,9 @@
 package com.mwalczak.player.ui.home
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import com.mwalczak.player.data.Category
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.filled.Home
 import androidx.activity.compose.BackHandler
@@ -306,7 +310,11 @@ internal fun UpdateBanner(container: AppContainer) {
 fun WithCatalog(container: AppContainer, state: CatalogState, content: @Composable (Catalog) -> Unit) {
     val scope = container.appScope
     when (state) {
-        is CatalogState.Ready -> content(state.catalog)
+        // Without the hidden categories (Settings → Hidden categories).
+        is CatalogState.Ready -> {
+            val browsable by container.browsable.collectAsStateWithLifecycle()
+            content(browsable ?: state.catalog)
+        }
         CatalogState.Idle, CatalogState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 CircularProgressIndicator()
@@ -336,6 +344,28 @@ private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogSta
         val categories = remember(catalog, terms) { catalog.categories.filter { matches(it.name) } }
         val showRecent = library.recent.isNotEmpty() && matches("Recently watched")
         val showAll = matches("All channels")
+        // Long-press on a category: pin it, or hide it (Settings → Hidden categories brings it back).
+        var menuFor by remember { mutableStateOf<Category?>(null) }
+        menuFor?.let { category ->
+            val isPinned = category.id in library.pinnedIn(catalog.categories).map { it.id }
+            AlertDialog(
+                onDismissRequest = { menuFor = null },
+                title = { Text(category.name) },
+                text = {
+                    Column {
+                        TextButton(onClick = { container.library.togglePinnedCategory(category); menuFor = null }, modifier = Modifier.fillMaxWidth()) {
+                            Icon(if (isPinned) Icons.Outlined.PushPin else Icons.Filled.PushPin, null)
+                            Text(if (isPinned) "  Unpin" else "  Pin to the top")
+                        }
+                        TextButton(onClick = { container.library.setCategoryHidden(category.name, true); menuFor = null }, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.VisibilityOff, null)
+                            Text("  Hide (from Live TV, Search and the guide)")
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { menuFor = null }) { Text("Cancel") } },
+            )
+        }
         Column(Modifier.fillMaxSize()) {
             OutlinedTextField(
                 value = filter,
@@ -396,6 +426,7 @@ private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogSta
                                 catalog.channelsIn(category.id).size,
                                 pinned = true,
                                 onPin = { container.library.togglePinnedCategory(category) },
+                                onLongClick = { menuFor = category },
                                 modifier = Modifier.remembered("pinned-${category.id}"),
                             ) { actions.openCategory(category.id) }
                         }
@@ -421,6 +452,7 @@ private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogSta
                             catalog.channelsIn(category.id).size,
                             pinned = category.id in pinnedIds,
                             onPin = { container.library.togglePinnedCategory(category) },
+                            onLongClick = { menuFor = category },
                             modifier = Modifier.remembered(category.id),
                         ) { actions.openCategory(category.id) }
                     }
@@ -433,6 +465,7 @@ private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogSta
 private fun androidx.compose.foundation.lazy.grid.LazyGridScope.header(content: @Composable () -> Unit) =
     item(span = { GridItemSpan(maxLineSpan) }) { content() }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CategoryCard(
     name: String,
@@ -441,6 +474,8 @@ private fun CategoryCard(
     pinned: Boolean = false,
     onPin: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    /** Long-press (long OK on a remote): pin / hide menu. */
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -451,7 +486,7 @@ private fun CategoryCard(
             .clip(CardShape)
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .focusHighlight(interaction)
-            .clickable(interactionSource = interaction, indication = LocalIndication.current, onClick = onClick)
+            .combinedClickable(interactionSource = interaction, indication = LocalIndication.current, onLongClick = onLongClick, onClick = onClick)
             .padding(start = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -534,9 +569,10 @@ fun Catalog.categoryName(channel: Channel): String? =
 @Composable
 fun CategoryScreen(container: AppContainer, actions: Actions, categoryId: String) {
     val state by container.catalog.state.collectAsStateWithLifecycle()
+    val browsable by container.browsable.collectAsStateWithLifecycle()
     val library by container.library.library.collectAsStateWithLifecycle()
     var filter by rememberSaveable { mutableStateOf("") }
-    val catalog = (state as? CatalogState.Ready)?.catalog
+    val catalog = (state as? CatalogState.Ready)?.let { browsable ?: it.catalog }
     BackHandler { actions.backHome() }
 
     val title = when (categoryId) {

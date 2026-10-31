@@ -59,7 +59,8 @@ import com.mwalczak.player.ui.common.rememberFocusMemory
 internal fun StartTab(container: AppContainer, actions: Actions, onBrowseFavorites: () -> Unit, onFindChannels: () -> Unit) {
     val library by container.library.library.collectAsStateWithLifecycle()
     val catalogState by container.catalog.state.collectAsStateWithLifecycle()
-    val catalog = (catalogState as? CatalogState.Ready)?.catalog
+    val browsable by container.browsable.collectAsStateWithLifecycle()
+    val catalog = (catalogState as? CatalogState.Ready)?.let { browsable ?: it.catalog }
     val pinned = remember(library, catalog) { catalog?.let { library.pinnedIn(it.categories) }.orEmpty() }
 
     // Back from a list or full screen, the remote lands on the tile it came from.
