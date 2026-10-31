@@ -7,6 +7,7 @@ import android.os.Build
 import android.provider.Settings
 import com.mwalczak.player.PlaybackQueue
 import com.mwalczak.player.data.CatalogRepository
+import com.mwalczak.player.data.Channel
 import com.mwalczak.player.data.Credentials
 import com.mwalczak.player.data.LibraryStore
 import kotlinx.coroutines.flow.first
@@ -179,6 +180,11 @@ class RemoteControl(
         runCatching { send(device, RemoteRequest(type)) }
     }
 
+    /** Switches [device] to another feed of the channel it shows. */
+    suspend fun feed(device: RemoteDevice, channel: Channel): Result<RemoteStatus> = withContext(Dispatchers.IO) {
+        runCatching { send(device, RemoteRequest("feed", channels = listOf(channel))) }
+    }
+
     suspend fun status(device: RemoteDevice): Result<RemoteStatus> = withContext(Dispatchers.IO) {
         runCatching {
             http.newCall(Request.Builder().url("${device.baseUrl}/status").build()).execute().use { r ->
@@ -252,6 +258,8 @@ class RemoteControl(
             "previous" -> emit(RemoteCommand.Previous)
             "last" -> emit(RemoteCommand.Last)
             "stop" -> emit(RemoteCommand.Stop)
+            "reload" -> emit(RemoteCommand.Reload)
+            "feed" -> emit(RemoteCommand.Feed(cmd.channels.firstOrNull() ?: return 400 to currentStatus(error = "no channel")))
             else -> return 400 to currentStatus(error = "unknown command")
         }
         return 200 to currentStatus()

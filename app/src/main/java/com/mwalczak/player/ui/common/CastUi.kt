@@ -1,5 +1,18 @@
 package com.mwalczak.player.ui.common
 
+import com.mwalczak.player.cast.RemoteStatus
+import androidx.compose.runtime.produceState
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import com.mwalczak.player.ui.home.categoryName
+import com.mwalczak.player.data.Channel
+import com.mwalczak.player.data.ChannelMatcher
+import com.mwalczak.player.cast.isPlaying
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.AltRoute
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -134,31 +147,96 @@ fun RemoteBar(container: AppContainer, modifier: Modifier = Modifier) {
         }
     }
 
-    Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = CardShape, modifier = modifier) {
-        Row(
-            Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Icon(Icons.Default.CastConnected, contentDescription = null)
-            Column(Modifier.weight(1f).padding(start = 8.dp)) {
-                Text(device.name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val s = status
-                Text(
-                    when {
-                        s == null -> "Connecting…"
-                        s.playing != null -> "${s.playing}  ·  ${s.index + 1}/${s.count} ${s.title.orEmpty()}"
-                        else -> "Pick a channel to play it on the TV"
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+    var choosingFeed by remember { mutableStateOf(false) }
+    val s = status
+    if (choosingFeed && s != null) {
+        FeedsDialog(container, s, onDismiss = { choosingFeed = false }) { channel ->
+            choosingFeed = false
+            scope.launch {
+                container.remote.feed(device, channel)
+                    .onSuccess { container.remote.refreshSoon() }
+                    .onFailure { Toast.makeText(context, "${device.name}: ${it.message}", Toast.LENGTH_SHORT).show() }
             }
-            IconButton(onClick = { send("previous") }) { Icon(Icons.Default.SkipPrevious, "Previous channel on TV") }
-            IconButton(onClick = { send("next") }) { Icon(Icons.Default.SkipNext, "Next channel on TV") }
-            IconButton(onClick = { send("last") }) { Icon(Icons.Default.SwapHoriz, "Last channel on TV") }
-            IconButton(onClick = { send("stop") }) { Icon(Icons.Default.Stop, "Stop on TV") }
-            IconButton(onClick = { container.remote.select(null) }) { Icon(Icons.Default.Close, "Stop casting") }
         }
     }
+
+    // Two rows, so every control fits on a phone held upright: what's on, then the buttons.
+    Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = CardShape, modifier = modifier) {
+        Column(Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.CastConnected, contentDescription = null)
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text(device.name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        when {
+                            s == null -> "Connecting…"
+                            s.playing != null -> "${s.playing}  ·  ${s.index + 1}/${s.count} ${s.title.orEmpty()}"
+                            else -> "Pick a channel to play it on the TV"
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                IconButton(onClick = { container.remote.select(null) }) { Icon(Icons.Default.Close, "Stop casting") }
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val playing = s?.playing != null
+                IconButton(onClick = { send("previous") }, enabled = playing) { Icon(Icons.Default.SkipPrevious, "Previous channel on TV") }
+                IconButton(onClick = { send("next") }, enabled = playing) { Icon(Icons.Default.SkipNext, "Next channel on TV") }
+                IconButton(onClick = { send("reload") }, enabled = playing) { Icon(Icons.Default.Refresh, "Reload the channel on TV") }
+                IconButton(onClick = { send("last") }, enabled = playing) { Icon(Icons.Default.SwapHoriz, "Last channel on TV") }
+                IconButton(onClick = { choosingFeed = true }, enabled = playing) { Icon(Icons.Default.AltRoute, "Other feeds of the channel on TV") }
+                IconButton(onClick = { send("stop") }, enabled = playing) { Icon(Icons.Default.Stop, "Stop on TV") }
+            }
+        }
+    }
+}
+
+/** Other streams of the channel on the TV (same channel first, then similar names), from this device's catalog. */
+@Composable
+private fun FeedsDialog(container: AppContainer, status: RemoteStatus, onDismiss: () -> Unit, onPick: (Channel) -> Unit) {
+    val catalog = container.catalog.catalog
+    val found by produceState<Pair<Channel?, List<Channel>>?>(null, status.streamId, status.playing, catalog) {
+        val all = catalog?.channels.orEmpty()
+        value = withContext(Dispatchers.Default) {
+            val current = all.firstOrNull { status.isPlaying(it) }
+            current to current?.let { ChannelMatcher.alternatesFor(it, all) + ChannelMatcher.similarTo(it, all) }.orEmpty()
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Other feeds of ${status.playing.orEmpty()}") },
+        text = {
+            val result = found
+            when {
+                result == null -> CircularProgressIndicator()
+                result.second.isEmpty() -> Text("No other feed of this channel in the channel list.")
+                else -> LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                    items(result.second, key = { it.streamId }) { channel ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onPick(channel) }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            ChannelLogo(channel.icon, Modifier.size(36.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(channel.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                catalog?.categoryName(channel)?.let {
+                                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
 }

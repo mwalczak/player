@@ -92,6 +92,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.nativeKeyCode
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -231,6 +232,8 @@ private fun PlayerContent(
                 RemoteCommand.Previous -> controller.previous()
                 RemoteCommand.Last -> controller.last()
                 RemoteCommand.Stop -> onExit()
+                RemoteCommand.Reload -> controller.reload()
+                is RemoteCommand.Feed -> controller.playFeed(command.channel)
                 is RemoteCommand.Play -> Unit // handled by navigation
             }
         }
@@ -259,12 +262,12 @@ private fun PlayerContent(
     var focusTopTick by remember { mutableIntStateOf(0) }
     var focusBottomTick by remember { mutableIntStateOf(0) }
     var pictureFocused by remember { mutableStateOf(true) }
-    var overlayHasFocus by remember { mutableStateOf(false) }
     var addingToList by remember { mutableStateOf(false) }
 
-    // Auto-hide the overlay after a few seconds without interaction (not while a remote is on its buttons).
-    LaunchedEffect(overlay, interaction, state.status, overlayHasFocus, addingToList) {
-        if (overlay && !panel && !schedule && !overlayHasFocus && !addingToList && state.status == PlaybackStatus.Playing) {
+    // Auto-hide the controls 5 s after the last tap or key press (also with the remote on one of
+    // their buttons; focus then goes back to the picture).
+    LaunchedEffect(overlay, interaction, state.status, addingToList) {
+        if (overlay && !panel && !schedule && !feeds && !addingToList && state.status == PlaybackStatus.Playing) {
             delay(5_000)
             overlay = false
         }
@@ -296,6 +299,11 @@ private fun PlayerContent(
             .focusRequester(focus)
             .onFocusChanged { pictureFocused = it.isFocused }
             .focusable()
+            // Any key while the controls are up counts as using them (keeps them up for another 5 s).
+            .onPreviewKeyEvent { event ->
+                if (overlay && event.type == KeyEventType.KeyDown) interaction++
+                false
+            }
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 // Play / pause keys run autoplay wherever the remote is (picture, controls, channel list).
@@ -428,7 +436,6 @@ private fun PlayerContent(
             Overlay(
                 focusTopTick = focusTopTick,
                 focusBottomTick = focusBottomTick,
-                onFocusInside = { overlayHasFocus = it },
                 onAddToList = { addingToList = true },
                 state = state,
                 isFavorite = isFavorite,
@@ -513,7 +520,6 @@ private fun PlayerContent(
 private fun Overlay(
     focusTopTick: Int,
     focusBottomTick: Int,
-    onFocusInside: (Boolean) -> Unit,
     onAddToList: () -> Unit,
     state: PlayerUiState,
     isFavorite: Boolean,
@@ -547,7 +553,7 @@ private fun Overlay(
             runCatching { bottomFocus.requestFocus() }
         }
     }
-    Box(Modifier.fillMaxSize().onFocusChanged { onFocusInside(it.hasFocus) }) {
+    Box(Modifier.fillMaxSize()) {
         Row(
             Modifier
                 .fillMaxWidth()

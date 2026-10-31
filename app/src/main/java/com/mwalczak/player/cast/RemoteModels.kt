@@ -11,7 +11,7 @@ data class RemoteDevice(val name: String, val host: String, val port: Int) {
         get() = "http://${if (host.contains(':')) "[${host.replace("%", "%25")}]" else host}:$port"
 }
 
-/** Body of `POST /command`. [type] is one of play, next, previous, last, stop, login. */
+/** Body of `POST /command`. [type] is one of play, next, previous, last, stop, reload, feed (channels[0]), login. */
 @Serializable
 data class RemoteRequest(
     val type: String,
@@ -46,6 +46,10 @@ sealed interface RemoteCommand {
     data object Previous : RemoteCommand
     data object Last : RemoteCommand
     data object Stop : RemoteCommand
+    /** Start the stream on screen again. */
+    data object Reload : RemoteCommand
+    /** Play another feed of the channel on screen. */
+    data class Feed(val channel: Channel) : RemoteCommand
 }
 
 /** What the local player is showing, published for remote status requests. */
