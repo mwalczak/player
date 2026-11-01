@@ -45,7 +45,7 @@ class HomeBackTest {
 
         compose.onNodeWithText("Favorites").assertExists()
         compose.onNodeWithText("Sport").assertExists()
-        compose.onNodeWithText("1 channels · PL: TVN").assertExists()
+        compose.onAllNodesWithText("1 channels").assertCountEquals(2) // Favorites and Sport
 
         // Another tab, then Back: Home again.
         compose.onNodeWithText("Search").performClick()

@@ -170,7 +170,7 @@ fun HomeScreen(container: AppContainer, actions: Actions) {
                 CrashReportBanner()
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when (tab) {
-                        Tab.Start -> StartTab(container, actions, onBrowseFavorites = { tab = Tab.Favorites }, onFindChannels = { tab = Tab.Live })
+                        Tab.Start -> StartTab(container, actions, onBrowseFavorites = { tab = Tab.Favorites })
                         Tab.Live -> LiveTab(container, actions, catalogState)
                         Tab.Guide -> GuideTab(container, actions)
                         Tab.Search -> SearchTab(container, actions, catalogState)
