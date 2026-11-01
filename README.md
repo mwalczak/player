@@ -125,4 +125,4 @@ app/src/main/java/com/mwalczak/player/
 
 ## Ideas for later
 
-Movies and series (VOD), a full EPG grid, catch-up, multiple accounts, picture-in-picture, and per-channel manual backup lists.
+Ideas and to-dos are tracked in PMO, project **PLAYER** (https://pmo.walczaki.com), e.g. remembering the working feed of a channel, a nightly guide update, audio/subtitle choice, number keys, a sleep timer, voice search, a PIN for hidden categories and several accounts. Catch-up isn't possible with mybunny (no channel has an archive), and movies/series are out of scope.
