@@ -1,5 +1,6 @@
 package com.mwalczak.player.ui.home
 
+import com.mwalczak.player.data.epg.GuideUpdates
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.ui.platform.LocalContext
@@ -327,6 +328,18 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
                     )
                 },
                 modifier = Modifier.clickable { choosingSources = true },
+            )
+            val autoUpdate by container.settings.guideAutoUpdate.collectAsStateWithLifecycle(true)
+            ListItem(
+                headlineContent = { Text("Update the guide every night") },
+                supportingContent = {
+                    Text(
+                        "Around ${GuideUpdates.HOUR}:30" + (if (epgSettings.wifiOnly) " on Wi-Fi" else "") +
+                            ", or when the app opens and the guide is over a day old",
+                    )
+                },
+                trailingContent = { Switch(checked = autoUpdate, onCheckedChange = null) },
+                modifier = Modifier.clickable { scope.launch { container.settings.setGuideAutoUpdate(!autoUpdate) } },
             )
             ListItem(
                 headlineContent = { Text("Download guides only on Wi-Fi") },

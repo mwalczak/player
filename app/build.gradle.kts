@@ -69,6 +69,8 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     // Favorites on the TV home screen, last channel in "Continue watching".
     implementation(libs.androidx.tvprovider)
+    // The nightly TV guide update.
+    implementation(libs.androidx.work.runtime)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

@@ -123,6 +123,9 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
 
     fun setHiddenCategories(names: List<String>) = update { it.copy(hiddenCategories = names.distinct().sorted()) }
 
+    /** Pinned categories show in this order on Live TV, Home and in the guide. */
+    fun movePinnedCategory(from: Int, to: Int) = update { it.copy(pinnedCategories = it.pinnedCategories.move(from, to)) }
+
     /** Replaces everything, e.g. with favorites and lists copied from the phone. */
     fun replaceAll(library: Library) = update { library }
 

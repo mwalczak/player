@@ -1,5 +1,7 @@
 package com.mwalczak.player.ui.home
 
+import com.mwalczak.player.ui.lists.ReorderList
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import com.mwalczak.player.data.Category
@@ -345,6 +347,8 @@ private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogSta
         val categories = remember(catalog, terms) { catalog.categories.filter { matches(it.name) } }
         val showRecent = library.recent.isNotEmpty() && matches("Recently watched")
         val showAll = matches("All channels")
+        var orderingPinned by remember { mutableStateOf(false) }
+        if (orderingPinned) PinnedOrderDialog(container, catalog, onDismiss = { orderingPinned = false })
         // Long-press on a category: pin it, or hide it (Settings → Hidden categories brings it back).
         var menuFor by remember { mutableStateOf<Category?>(null) }
         menuFor?.let { category ->
@@ -420,7 +424,17 @@ private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogSta
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     if (pinned.isNotEmpty()) {
-                        header { SectionHeader("Pinned") }
+                        header {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.weight(1f)) { SectionHeader("Pinned") }
+                                if (library.pinnedCategories.size > 1 && terms.isEmpty()) {
+                                    TextButton(onClick = { orderingPinned = true }) {
+                                        Icon(Icons.Default.SwapVert, null)
+                                        Text(" Reorder")
+                                    }
+                                }
+                            }
+                        }
                         items(pinned, key = { "pinned-${it.id}" }) { category ->
                             CategoryCard(
                                 category.name,
@@ -461,6 +475,29 @@ private fun LiveTab(container: AppContainer, actions: Actions, state: CatalogSta
             }
         }
     }
+}
+
+/** Pinned categories in the order they show on Live TV, Home and in the guide: drag to change it. */
+@Composable
+private fun PinnedOrderDialog(container: AppContainer, catalog: Catalog, onDismiss: () -> Unit) {
+    val library by container.library.library.collectAsStateWithLifecycle()
+    val names = remember(catalog) { catalog.categories.associate { it.id to it.name } }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Order pinned categories") },
+        text = {
+            ReorderList(
+                items = library.pinnedCategories,
+                key = { it },
+                name = { library.pinnedNames[it] ?: names[it] ?: it },
+                onMove = container.library::movePinnedCategory,
+                onRemove = { id -> catalog.categories.firstOrNull { it.id == id }?.let(container.library::togglePinnedCategory) },
+                removeLabel = "Unpin",
+                modifier = Modifier.heightIn(max = 440.dp),
+            )
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+    )
 }
 
 private fun androidx.compose.foundation.lazy.grid.LazyGridScope.header(content: @Composable () -> Unit) =

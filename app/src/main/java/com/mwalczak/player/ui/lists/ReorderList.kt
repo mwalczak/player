@@ -50,29 +50,51 @@ import com.mwalczak.player.ui.common.CardShape
 import com.mwalczak.player.ui.common.ChannelLogo
 import kotlinx.coroutines.launch
 
-/**
- * Channels to put in order: drag a row by its handle (≡). With a TV remote, OK on the handle picks
- * the row up, ▲/▼ move it and OK (or moving away) puts it down.
- */
+/** Channels to put in order (see the generic [ReorderList]). */
 @Composable
 fun ReorderList(
     channels: List<Channel>,
     onMove: (from: Int, to: Int) -> Unit,
     onRemove: (Channel) -> Unit,
     modifier: Modifier = Modifier,
+) = ReorderList(
+    items = channels,
+    key = { it.streamId },
+    name = { it.name },
+    onMove = onMove,
+    onRemove = onRemove,
+    removeLabel = "Remove",
+    modifier = modifier,
+    leading = { ChannelLogo(it.icon, Modifier.size(40.dp)) },
+)
+
+/**
+ * Things to put in order: drag a row by its handle (≡). With a TV remote, OK on the handle picks
+ * the row up, ▲/▼ move it and OK (or moving away) puts it down.
+ */
+@Composable
+fun <T> ReorderList(
+    items: List<T>,
+    key: (T) -> Any,
+    name: (T) -> String,
+    onMove: (from: Int, to: Int) -> Unit,
+    onRemove: (T) -> Unit,
+    removeLabel: String,
+    modifier: Modifier = Modifier,
+    leading: (@Composable (T) -> Unit)? = null,
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val move by rememberUpdatedState(onMove)
 
     // The row being dragged: where it was laid out when the drag started, and how far it has gone.
-    var dragged by remember { mutableStateOf<Int?>(null) }
+    var dragged by remember { mutableStateOf<Any?>(null) }
     var startOffset by remember { mutableIntStateOf(0) }
     var dragDelta by remember { mutableFloatStateOf(0f) }
     // Where the dragged row should be after the last swap: no new swap until the list is laid out like that.
     var expectedIndex by remember { mutableIntStateOf(-1) }
     // The row picked up with a remote.
-    var lifted by remember { mutableStateOf<Int?>(null) }
+    var lifted by remember { mutableStateOf<Any?>(null) }
 
     fun draggedInfo() = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == dragged }
 
@@ -105,8 +127,9 @@ fun ReorderList(
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        itemsIndexed(channels, key = { _, c -> c.streamId }) { index, channel ->
-            val key = channel.streamId
+        itemsIndexed(items, key = { _, item -> key(item) }) { index, item ->
+            val key = key(item)
+            val label = name(item)
             val isDragged = dragged == key
             val isLifted = lifted == key
             Row(
@@ -126,13 +149,13 @@ fun ReorderList(
                         else MaterialTheme.colorScheme.surfaceContainer,
                     )
                     .then(if (isLifted) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CardShape) else Modifier)
-                    .padding(start = 8.dp, top = 4.dp, bottom = 4.dp),
+                    .padding(start = if (leading != null) 8.dp else 16.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                ChannelLogo(channel.icon, Modifier.size(40.dp))
+                leading?.invoke(item)
                 Text(
-                    channel.name,
+                    label,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 1,
@@ -149,7 +172,7 @@ fun ReorderList(
                                 Key.DirectionDown -> index + 1
                                 else -> return@onPreviewKeyEvent false
                             }
-                            if (to in channels.indices) {
+                            if (to in items.indices) {
                                 move(index, to)
                                 scope.launch {
                                     val visible = listState.layoutInfo.visibleItemsInfo
@@ -181,12 +204,12 @@ fun ReorderList(
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             Icons.Default.DragHandle,
-                            contentDescription = if (isLifted) "Put ${channel.name} down" else "Move ${channel.name}",
+                            contentDescription = if (isLifted) "Put $label down" else "Move $label",
                             tint = if (isLifted || isDragged) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
-                IconButton(onClick = { onRemove(channel) }) { Icon(Icons.Default.Delete, "Remove ${channel.name}") }
+                IconButton(onClick = { onRemove(item) }) { Icon(Icons.Default.Delete, "$removeLabel $label") }
             }
         }
     }

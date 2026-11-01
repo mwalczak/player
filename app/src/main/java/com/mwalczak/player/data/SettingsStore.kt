@@ -45,6 +45,7 @@ class SettingsStore(private val context: Context) {
         val autoplaySeconds = intPreferencesKey("autoplay_seconds")
         val changelogSeen = intPreferencesKey("changelog_seen")
         val audioLanguage = stringPreferencesKey("audio_language")
+        val guideAutoUpdate = booleanPreferencesKey("guide_auto_update")
         val subtitleLanguage = stringPreferencesKey("subtitle_language")
     }
 
@@ -53,6 +54,13 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setPreviewWhileBrowsing(enabled: Boolean) {
         context.dataStore.edit { it[Keys.preview] = enabled }
+    }
+
+    /** Update the TV guide by itself every night (and on start when it's over a day old). */
+    val guideAutoUpdate: Flow<Boolean> = context.dataStore.data.map { it[Keys.guideAutoUpdate] ?: true }
+
+    suspend fun setGuideAutoUpdate(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.guideAutoUpdate] = enabled }
     }
 
     /** Sound language picked in the player last (null: the stream's default). */

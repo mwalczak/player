@@ -6,6 +6,7 @@ import com.mwalczak.player.cast.RemoteControl
 import com.mwalczak.player.data.CatalogRepository
 import com.mwalczak.player.data.CatalogState
 import com.mwalczak.player.data.epg.EpgRepository
+import com.mwalczak.player.data.epg.GuideUpdates
 import com.mwalczak.player.data.reminders.ReminderStore
 import com.mwalczak.player.data.tvhome.TvHome
 import com.mwalczak.player.data.sync.SyncClient
@@ -114,6 +115,16 @@ class AppContainer(context: Context) {
         appScope.launch {
             library.library.collect { catalog.catalog?.let { c -> library.fitTo(c, channelsToo = false) } }
         }
+        // The nightly guide update follows its settings; on start, catch up if the night was missed.
+        appScope.launch {
+            combine(settings.guideAutoUpdate, settings.epg) { auto, guide -> (auto && guide.enabled) to guide.wifiOnly }
+                .distinctUntilChanged()
+                .collect { (enabled, wifiOnly) -> GuideUpdates.schedule(context, enabled, wifiOnly) }
+        }
+        appScope.launch {
+            delay(30_000) // after start-up, not during it
+            updateGuideIfStale()
+        }
         // Favorites as the app's row on the TV home screen.
         if (tvHome.supported) {
             appScope.launch {
@@ -131,6 +142,20 @@ class AppContainer(context: Context) {
     }.stateIn(appScope, SharingStarted.WhileSubscribed(5_000), System.currentTimeMillis() / 1000)
 
     /** Downloads and builds the guide. Only on request (Settings), never automatically for now. */
+    /**
+     * Brings the guide up to date when it's more than a day old (or its sources changed): the
+     * nightly update, and on start when the night was missed. Loads the channel list first when
+     * the app isn't open.
+     */
+    suspend fun updateGuideIfStale() {
+        val creds = settings.currentCredentials() ?: return
+        val guide = settings.epg.first()
+        if (!guide.enabled || !settings.guideAutoUpdate.first()) return
+        if (catalog.catalog == null) catalog.load(creds)
+        val current = catalog.catalog ?: return
+        epg.refresh(creds, current, guide, guidePriority(), force = false)
+    }
+
     suspend fun refreshEpg() {
         val creds = settings.currentCredentials() ?: return
         val current = catalog.catalog ?: return
