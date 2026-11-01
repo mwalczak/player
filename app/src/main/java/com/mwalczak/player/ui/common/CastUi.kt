@@ -1,5 +1,6 @@
 package com.mwalczak.player.ui.common
 
+import android.content.pm.PackageManager
 import com.mwalczak.player.cast.RemoteStatus
 import androidx.compose.runtime.produceState
 import androidx.compose.foundation.layout.heightIn
@@ -70,6 +71,10 @@ fun CastButton(
     tint: Color = LocalContentColor.current,
     onPicked: (RemoteDevice) -> Unit = {},
 ) {
+    // A TV is what gets cast to; it doesn't cast anywhere itself.
+    val context = LocalContext.current
+    val isTv = remember { context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) }
+    if (isTv) return
     val target by container.remote.target.collectAsStateWithLifecycle()
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }) {

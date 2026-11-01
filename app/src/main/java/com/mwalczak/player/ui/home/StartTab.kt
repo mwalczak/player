@@ -52,8 +52,9 @@ import com.mwalczak.player.ui.common.focusMemory
 import com.mwalczak.player.ui.common.rememberFocusMemory
 
 /**
- * The first page: Favorites, the user's lists and the pinned categories as tiles. A tile starts
- * watching (from its first channel); ≡ on it opens the list to browse.
+ * The first page: Favorites, the user's lists and the pinned categories as tiles. Favorites and
+ * list tiles start watching (from the first channel; ≡ opens them); category tiles open the
+ * category (▶ plays it).
  */
 @Composable
 internal fun StartTab(container: AppContainer, actions: Actions, onBrowseFavorites: () -> Unit, onFindChannels: () -> Unit) {
@@ -123,6 +124,7 @@ internal fun StartTab(container: AppContainer, actions: Actions, onBrowseFavorit
                     modifier = Modifier.remembered("category-${category.id}"),
                     onPlay = { if (channels.isNotEmpty()) actions.play(category.name, channels, 0) },
                     onBrowse = { actions.openCategory(category.id) },
+                    opensOnTap = true,
                 )
             }
         }
@@ -144,6 +146,8 @@ private fun Tile(
     modifier: Modifier,
     onPlay: () -> Unit,
     onBrowse: () -> Unit,
+    /** Tap opens it (and the side button plays) instead of the other way round: for categories. */
+    opensOnTap: Boolean = false,
 ) {
     val interaction = remember { MutableInteractionSource() }
     Row(
@@ -153,7 +157,7 @@ private fun Tile(
             .clip(CardShape)
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .focusHighlight(interaction)
-            .clickable(interactionSource = interaction, indication = LocalIndication.current, onClick = onPlay)
+            .clickable(interactionSource = interaction, indication = LocalIndication.current, onClick = if (opensOnTap) onBrowse else onPlay)
             .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -175,9 +179,9 @@ private fun Tile(
                     channels.take(4).forEach { ChannelLogo(it.icon, Modifier.size(36.dp)) }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                    if (!opensOnTap) Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                     Text(
-                        "${channels.size} channels · ${channels.first().name}",
+                        if (opensOnTap) "${channels.size} channels" else "${channels.size} channels · ${channels.first().name}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -186,6 +190,10 @@ private fun Tile(
                 }
             }
         }
-        IconButton(onClick = onBrowse) { Icon(Icons.AutoMirrored.Filled.List, "Open $title") }
+        if (opensOnTap) {
+            IconButton(onClick = onPlay, enabled = channels.isNotEmpty()) { Icon(Icons.Default.PlayArrow, "Play $title") }
+        } else {
+            IconButton(onClick = onBrowse) { Icon(Icons.AutoMirrored.Filled.List, "Open $title") }
+        }
     }
 }

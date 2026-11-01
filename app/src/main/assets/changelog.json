@@ -68,5 +68,14 @@
     "items": [
       "On the phone and tablet, going to the home screen while watching keeps the channel playing in a small floating window, with ⏮ ⏭, close and full screen"
     ]
+  },
+  {
+    "id": 8,
+    "date": "2026-11-01",
+    "title": "Home and TV tweaks",
+    "items": [
+      "Home: a pinned category tile opens the category (▶ on it plays it)",
+      "No cast button on the TV, which only receives"
+    ]
   }
 ]
