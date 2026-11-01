@@ -85,5 +85,14 @@
     "items": [
       "Favorites and list tiles on Home now open too, like categories; ▶ on a tile starts watching it"
     ]
+  },
+  {
+    "id": 10,
+    "date": "2026-11-01",
+    "title": "Sound tracks and subtitles",
+    "items": [
+      "Channels with more than one sound track or with subtitles show 🔊 / CC next to their name, and a button in the player's controls to pick one (only when there's a choice)",
+      "The language you pick is remembered for other channels"
+    ]
   }
 ]

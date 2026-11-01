@@ -4,6 +4,10 @@ import android.content.Context
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import java.util.Locale
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
@@ -60,7 +64,35 @@ data class PlayerUiState(
     val previousIndex: Int? = null,
     /** Autoplay going through the list; null when off. */
     val autoplay: Autoplay? = null,
+    /** Sound tracks of the stream on screen (a choice only when there are 2+). */
+    val audioTracks: List<TrackChoice> = emptyList(),
+    /** Its subtitles; none selected = off. */
+    val subtitleTracks: List<TrackChoice> = emptyList(),
 )
+
+/** One sound or subtitle track of the stream on screen. [key] is "group:track" in the player's current tracks. */
+data class TrackChoice(val key: String, val label: String, val language: String?, val selected: Boolean)
+
+/** "Polish · 5.1 · Dolby", "English", "Track 2": what a track is called in the audio / subtitle lists. */
+fun describeTrack(format: Format, position: Int): String {
+    val language = format.language?.takeIf { it.isNotBlank() && it != C.LANGUAGE_UNDETERMINED }
+        ?.let { Locale.forLanguageTag(it).getDisplayLanguage(Locale.ENGLISH).takeIf { name -> name.isNotBlank() } ?: it }
+    val label = format.label?.takeIf { it.isNotBlank() && !it.equals(language, ignoreCase = true) }
+    val channels = when (format.channelCount) {
+        1 -> "mono"
+        2 -> "stereo"
+        6 -> "5.1"
+        8 -> "7.1"
+        else -> null
+    }
+    val codec = when (format.sampleMimeType) {
+        MimeTypes.AUDIO_AC3, MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_E_AC3_JOC -> "Dolby"
+        MimeTypes.AUDIO_DTS, MimeTypes.AUDIO_DTS_HD -> "DTS"
+        else -> null
+    }
+    return listOfNotNull(language ?: label ?: "Track $position", label.takeIf { language != null }, channels, codec)
+        .joinToString(" · ")
+}
 
 /** Autoplay: the next channel comes on when [secondsLeft] reaches zero (unless [paused]). */
 data class Autoplay(val secondsLeft: Int, val paused: Boolean = false) {
@@ -139,6 +171,8 @@ class PlayerController(
             }
         }
 
+        override fun onTracksChanged(tracks: Tracks) = publishTracks(tracks)
+
         override fun onPlayerError(error: PlaybackException) {
             if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                 player.seekToDefaultPosition()
@@ -170,6 +204,53 @@ class PlayerController(
 
     /** Starts the stream on screen again, e.g. when it froze. */
     fun reload() = playFeed(_state.value.playing)
+
+    /**
+     * The languages picked before (sound; subtitles, null = off), used for every channel that
+     * has them.
+     */
+    fun preferLanguages(audio: String?, subtitles: String?) {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setPreferredAudioLanguage(audio)
+            .setPreferredTextLanguage(subtitles)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitles == null)
+            .build()
+    }
+
+    /** Plays [choice] (a sound or subtitle track of the stream on screen). */
+    fun selectTrack(choice: TrackChoice) {
+        val (g, i) = choice.key.split(':').map { it.toInt() }
+        val group = player.currentTracks.groups.getOrNull(g) ?: return
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(group.type, false)
+            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, i))
+            .build()
+    }
+
+    fun subtitlesOff() {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            .build()
+    }
+
+    private fun publishTracks(tracks: Tracks) {
+        val audio = mutableListOf<TrackChoice>()
+        val subtitles = mutableListOf<TrackChoice>()
+        tracks.groups.forEachIndexed { g, group ->
+            val into = when (group.type) {
+                C.TRACK_TYPE_AUDIO -> audio
+                C.TRACK_TYPE_TEXT -> subtitles
+                else -> return@forEachIndexed
+            }
+            for (i in 0 until group.length) {
+                if (!group.isTrackSupported(i)) continue
+                val format = group.getTrackFormat(i)
+                into += TrackChoice("$g:$i", describeTrack(format, into.size + 1), format.language, group.isTrackSelected(i))
+            }
+        }
+        _state.update { it.copy(audioTracks = audio, subtitleTracks = subtitles) }
+    }
 
     /** Turns autoplay on: from now on the next channel comes on every [autoplaySeconds]. */
     fun startAutoplay() {
@@ -258,7 +339,9 @@ class PlayerController(
         limitJob?.cancel()
         silenceJob?.cancel()
         silence.reset()
-        _state.update { it.copy(playing = channel, status = PlaybackStatus.Loading, epg = emptyList()) }
+        // A track picked by hand belongs to that stream; the remembered languages carry on.
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().clearOverrides().build()
+        _state.update { it.copy(playing = channel, status = PlaybackStatus.Loading, epg = emptyList(), audioTracks = emptyList(), subtitleTracks = emptyList()) }
         if (recordRecent) container.lastPlayedStreamId = channel.streamId
         showNotice(notice)
 
@@ -458,6 +541,8 @@ class PlayerController(
         val dataSource = OkHttpDataSource.Factory(container.httpClient).setUserAgent(USER_AGENT)
         val extractors = DefaultExtractorsFactory()
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES)
+            // No made-up "CC1" track on every stream: only captions the stream declares (and DVB subtitles).
+            .setTsSubtitleFormats(emptyList())
         val loadControl = DefaultLoadControl.Builder()
             // Start playing quickly after a zap; live streams don't benefit from a huge buffer.
             .setBufferDurationsMs(15_000, 50_000, 1_500, 3_000)

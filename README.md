@@ -43,6 +43,7 @@ After that the app **updates itself**. Every push to `main` is built by GitHub A
   - Switch channels with swipe up/down, the ⏮ ⏭ buttons, or the remote (◀ ▶ or CH+/CH−). Zapping with swipes or the remote doesn't bring up the controls; a small label shows the new channel's number and name for 3 s.
   - On a phone or tablet, going to the home screen while watching shrinks the picture into a small floating window (picture-in-picture) with ⏮ ⏭, close and back to full screen.
   - ⟳ next to ⏮ ⏭ reloads the channel when it froze. ⇄-shaped *Other feeds* in the top controls lists other streams of the same channel from the whole catalog (then similar names); pick one to switch to it.
+  - Sound tracks and subtitles: when a stream has 2+ sound tracks or any subtitles, 🔊n / CC show next to the channel name and a button for each appears in the top controls (only then). Picking one remembers the language for other channels; subtitles can be turned off. Only subtitles the stream really has are offered (no empty CEA-608 "CC1" on every TS stream).
   - On a TV remote, **▲** jumps to the controls at the top (☆ favorite, add to list, aspect, cast, schedule, channel list) and **▼** to the ⏮ ⏭ ⇄ buttons. Move with ◀ ▶, press OK, and Back returns to the picture. A white ring shows the selected button.
   - ⇄ **Last channel** flips between the current channel and the one you watched before. The button shows its name, and the remote's Last key works too.
   - Open the side channel list with the list button or OK on a remote.

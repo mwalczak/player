@@ -44,6 +44,8 @@ class SettingsStore(private val context: Context) {
         val guideSource = stringPreferencesKey("guide_source")
         val autoplaySeconds = intPreferencesKey("autoplay_seconds")
         val changelogSeen = intPreferencesKey("changelog_seen")
+        val audioLanguage = stringPreferencesKey("audio_language")
+        val subtitleLanguage = stringPreferencesKey("subtitle_language")
     }
 
     /** Live preview next to channel lists on wide screens (TV, tablet, landscape phone). */
@@ -51,6 +53,20 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setPreviewWhileBrowsing(enabled: Boolean) {
         context.dataStore.edit { it[Keys.preview] = enabled }
+    }
+
+    /** Sound language picked in the player last (null: the stream's default). */
+    val audioLanguage: Flow<String?> = context.dataStore.data.map { it[Keys.audioLanguage] }
+
+    /** Subtitle language picked in the player last; null = subtitles off. */
+    val subtitleLanguage: Flow<String?> = context.dataStore.data.map { it[Keys.subtitleLanguage] }
+
+    suspend fun setAudioLanguage(language: String?) {
+        context.dataStore.edit { if (language == null) it.remove(Keys.audioLanguage) else it[Keys.audioLanguage] = language }
+    }
+
+    suspend fun setSubtitleLanguage(language: String?) {
+        context.dataStore.edit { if (language == null) it.remove(Keys.subtitleLanguage) else it[Keys.subtitleLanguage] = language }
     }
 
     /** The newest "what's new" entry already shown; null before the first one. */

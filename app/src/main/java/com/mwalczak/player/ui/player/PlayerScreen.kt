@@ -2,6 +2,10 @@
 
 package com.mwalczak.player.ui.player
 
+import androidx.media3.common.C
+import androidx.compose.material.icons.filled.ClosedCaptionOff
+import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.foundation.lazy.items
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
@@ -161,6 +165,30 @@ private fun PlayerContent(
     var panel by remember { mutableStateOf(false) }
     var schedule by remember { mutableStateOf(false) }
     var feeds by remember { mutableStateOf(false) }
+    // Sound / subtitle picker: shown for the type picked (only offered when the stream has a choice).
+    var picking by remember { mutableStateOf<Int?>(null) }
+    picking?.let { type ->
+        val audio = type == C.TRACK_TYPE_AUDIO
+        TrackDialog(
+            title = if (audio) "Sound" else "Subtitles",
+            choices = if (audio) state.audioTracks else state.subtitleTracks,
+            offOption = !audio,
+            onPick = { choice ->
+                controller.selectTrack(choice)
+                scope.launch {
+                    if (audio) container.settings.setAudioLanguage(choice.language)
+                    else container.settings.setSubtitleLanguage(choice.language ?: C.LANGUAGE_UNDETERMINED)
+                }
+                picking = null
+            },
+            onOff = {
+                controller.subtitlesOff()
+                scope.launch { container.settings.setSubtitleLanguage(null) }
+                picking = null
+            },
+            onDismiss = { picking = null },
+        )
+    }
     val reminders by container.reminders.reminders.collectAsStateWithLifecycle()
     var reminding by remember { mutableStateOf<com.mwalczak.player.ui.common.Show?>(null) }
     reminding?.let { com.mwalczak.player.ui.common.ReminderDialog(container, it, onDismiss = { reminding = null }) }
@@ -191,6 +219,7 @@ private fun PlayerContent(
         if (!started && cleared) {
             started = true
             controller.autoplaySeconds = container.settings.autoplaySeconds.first()
+            controller.preferLanguages(container.settings.audioLanguage.first(), container.settings.subtitleLanguage.first())
             controller.start()
             if (queue.autoplay) controller.startAutoplay()
         }
@@ -466,6 +495,8 @@ private fun PlayerContent(
                 onList = { panel = true },
                 onSchedule = { schedule = true },
                 onFeeds = { feeds = true },
+                onAudio = { picking = C.TRACK_TYPE_AUDIO },
+                onSubtitles = { picking = C.TRACK_TYPE_TEXT },
                 onReload = { controller.reload(); poke() },
                 onAutoplay = { controller.toggleAutoplay(); poke() },
                 onStopAutoplay = { controller.stopAutoplay(); poke() },
@@ -554,6 +585,8 @@ private fun Overlay(
     onList: () -> Unit,
     onSchedule: () -> Unit,
     onFeeds: () -> Unit,
+    onAudio: () -> Unit,
+    onSubtitles: () -> Unit,
     onReload: () -> Unit,
     onAutoplay: () -> Unit,
     onStopAutoplay: () -> Unit,
@@ -598,12 +631,15 @@ private fun Overlay(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    "${state.index + 1} / ${state.channels.size} · ${state.queueTitle}",
-                    color = Color.White.copy(alpha = 0.7f),
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "${state.index + 1} / ${state.channels.size} · ${state.queueTitle}",
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                    )
+                    TrackMarks(state)
+                }
             }
             // Autoplay: start / pause / resume, and turn off while it's on.
             val autoplay = state.autoplay
@@ -639,6 +675,20 @@ private fun Overlay(
             }
             IconButton(onClick = onResize, modifier = Modifier.focusRing()) { Icon(Icons.Default.AspectRatio, "Aspect: $resizeLabel", tint = Color.White) }
             Box(Modifier.focusRing()) { castButton() }
+            // Only when the stream offers a choice.
+            if (state.audioTracks.size > 1) {
+                IconButton(onClick = onAudio, modifier = Modifier.focusRing()) { Icon(Icons.Default.Audiotrack, "Sound: ${state.audioTracks.size} tracks", tint = Color.White) }
+            }
+            if (state.subtitleTracks.isNotEmpty()) {
+                val on = state.subtitleTracks.any { it.selected }
+                IconButton(onClick = onSubtitles, modifier = Modifier.focusRing()) {
+                    Icon(
+                        if (on) Icons.Default.ClosedCaption else Icons.Default.ClosedCaptionOff,
+                        if (on) "Subtitles on" else "Subtitles off",
+                        tint = if (on) MaterialTheme.colorScheme.primary else Color.White,
+                    )
+                }
+            }
             IconButton(onClick = onFeeds, modifier = Modifier.focusRing()) { Icon(Icons.Default.AltRoute, "Other feeds of this channel", tint = Color.White) }
             IconButton(onClick = onSchedule, modifier = Modifier.focusRing()) { Icon(Icons.Default.Schedule, "Today's schedule", tint = Color.White) }
             IconButton(onClick = onList, modifier = Modifier.focusRing()) { Icon(Icons.AutoMirrored.Filled.List, "Channel list", tint = Color.White) }
@@ -912,6 +962,7 @@ private fun ChannelLabel(state: PlayerUiState) {
     ) {
         Text("${state.index + 1}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         ChannelLogo(state.channels[state.index].icon, Modifier.size(36.dp))
+        TrackMarks(state)
         Text(
             state.channels[state.index].name,
             color = Color.White,
@@ -1014,4 +1065,53 @@ private fun FeedRow(catalog: Catalog?, channel: Channel, playing: Boolean, modif
             )
         }
     }
+}
+
+/** 🔊2 and CC when the stream on screen has more than one sound track or any subtitles. */
+@Composable
+private fun TrackMarks(state: PlayerUiState) {
+    val audio = state.audioTracks.size
+    val subtitles = state.subtitleTracks.isNotEmpty()
+    if (audio < 2 && !subtitles) return
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (audio > 1) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Audiotrack, "$audio sound tracks", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                Text("$audio", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        if (subtitles) Icon(Icons.Default.ClosedCaption, "Subtitles", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+    }
+}
+
+/** Pick a sound or subtitle track (subtitles also "Off"). */
+@Composable
+private fun TrackDialog(
+    title: String,
+    choices: List<TrackChoice>,
+    offOption: Boolean,
+    onPick: (TrackChoice) -> Unit,
+    onOff: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                if (offOption) {
+                    val off = choices.none { it.selected }
+                    TextButton(onClick = onOff, modifier = Modifier.fillMaxWidth()) {
+                        Text((if (off) "✓  " else "     ") + "Off", Modifier.fillMaxWidth())
+                    }
+                }
+                choices.forEach { choice ->
+                    TextButton(onClick = { onPick(choice) }, modifier = Modifier.fillMaxWidth()) {
+                        Text((if (choice.selected) "✓  " else "     ") + choice.label, Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
 }
