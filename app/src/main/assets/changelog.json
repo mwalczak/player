@@ -103,5 +103,13 @@
       "The TV guide updates by itself every night around 4:30 (on Wi-Fi if set), and when the app opens with a guide over a day old; Settings → TV guide to turn it off",
       "Reorder pinned categories: Reorder next to “Pinned” on Live TV, then drag (or OK and ▲/▼ on the remote)"
     ]
+  },
+  {
+    "id": 12,
+    "date": "2026-11-21",
+    "title": "Silence in the background",
+    "items": [
+      "Switching to another app stops the stream completely (full screen and the browsing preview); coming back picks up the live picture again"
+    ]
   }
 ]

@@ -185,6 +185,29 @@ class PlayerController(
 
     init {
         player.addListener(listener)
+        synchronized(container.players) { container.players += this }
+    }
+
+    /** The app is in the background: nothing may play (or start playing) until it's back. */
+    @Volatile private var inBackground = false
+
+    /** The app went to the background: stop the stream (sound and connection), keep the channel. */
+    fun toBackground() {
+        inBackground = true
+        stallJob?.cancel()
+        retryJob?.cancel()
+        silenceJob?.cancel()
+        player.stop()
+    }
+
+    /** Back in front: the live picture of the same channel again. */
+    fun toForeground() {
+        if (!inBackground) return
+        inBackground = false
+        if (player.mediaItemCount == 0 || _state.value.status is PlaybackStatus.Failed) return
+        player.seekToDefaultPosition()
+        player.prepare()
+        player.playWhenReady = true
     }
 
     fun start() = select(_state.value.index)
@@ -260,6 +283,7 @@ class PlayerController(
             while (true) {
                 delay(1_000)
                 val autoplay = _state.value.autoplay ?: break
+                if (inBackground) continue
                 val ticked = autoplay.tick(_state.value.status)
                 if (ticked == null) next() else _state.update { it.copy(autoplay = ticked) }
             }
@@ -313,13 +337,6 @@ class PlayerController(
     }
 
     /** Re-tunes to the live edge, e.g. when returning from the background. */
-    fun resumeLive() {
-        if (_state.value.status is PlaybackStatus.Failed) return
-        player.seekToDefaultPosition()
-        player.prepare()
-        player.play()
-    }
-
     fun release() {
         autoplayJob?.cancel()
         silenceJob?.cancel()
@@ -328,6 +345,7 @@ class PlayerController(
         limitJob?.cancel()
         epgJob?.cancel()
         noticeJob?.cancel()
+        synchronized(container.players) { container.players -= this }
         player.removeListener(listener)
         player.release()
         if (recordRecent) container.playerStoppedAtMillis = System.currentTimeMillis()
@@ -352,8 +370,11 @@ class PlayerController(
             .setMediaId(channel.streamId.toString())
             .build()
         player.setMediaItem(item)
-        player.prepare()
-        player.playWhenReady = true
+        // In the background (autoplay, failover) only the channel changes; it starts on return.
+        if (!inBackground) {
+            player.prepare()
+            player.playWhenReady = true
+        }
         loadEpg(channel)
     }
 
@@ -423,6 +444,7 @@ class PlayerController(
         if (retried.add(current.streamId)) {
             retryJob = scope.launch {
                 delay(1_000)
+                if (inBackground) return@launch
                 player.stop()
                 player.seekToDefaultPosition()
                 player.prepare()

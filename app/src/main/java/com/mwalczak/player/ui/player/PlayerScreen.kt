@@ -109,8 +109,6 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -292,19 +290,8 @@ private fun PlayerContent(
     }
     FullscreenLandscape()
 
-    // Pause in the background; jump back to the live edge on return.
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_STOP -> controller.player.pause()
-                Lifecycle.Event.ON_START -> if (started) controller.resumeLive()
-                else -> Unit
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
+    // In the background the stream stops and comes back live on return: MainActivity does that
+    // for every player (this one and the browsing preview).
 
     // Remote: which overlay row to put focus on (top controls / bottom zapping buttons), and whether
     // focus is on the picture itself or inside the overlay.

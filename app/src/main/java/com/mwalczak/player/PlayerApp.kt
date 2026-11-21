@@ -9,6 +9,7 @@ import com.mwalczak.player.data.epg.EpgRepository
 import com.mwalczak.player.data.epg.GuideUpdates
 import com.mwalczak.player.data.reminders.ReminderStore
 import com.mwalczak.player.data.tvhome.TvHome
+import com.mwalczak.player.ui.player.PlayerController
 import com.mwalczak.player.data.sync.SyncClient
 import com.mwalczak.player.data.sync.SyncManager
 import kotlinx.coroutines.delay
@@ -91,6 +92,9 @@ class AppContainer(context: Context) {
             .distinctUntilChanged()
             .mapLatest { (all, hidden) -> all?.let { withContext(Dispatchers.Default) { it.withoutHidden(hidden) } } }
             .stateIn(appScope, SharingStarted.Eagerly, null)
+
+    /** Every player in use (full screen, browsing preview): stopped while the app is in the background. */
+    val players = mutableSetOf<PlayerController>()
 
     /** True while the player screen is open: going home then shrinks it into a small window (phone, tablet). */
     val inPlayer = MutableStateFlow(false)

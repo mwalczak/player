@@ -105,6 +105,11 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    private fun playersInFront(front: Boolean) {
+        val players = synchronized(appContainer.players) { appContainer.players.toList() }
+        players.forEach { if (front) it.toForeground() else it.toBackground() }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         openFrom(intent)
@@ -121,6 +126,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         appContainer.reminders.foreground = true
+        playersInFront(true)
         // Advertise this device and look for others (phone -> TV remote) while the app is open.
         appContainer.remote.start()
         // Fetch favorites and lists saved from other devices, and keep them in sync while open.
@@ -129,6 +135,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         appContainer.reminders.foreground = false
+        // Another app on screen (TV, phone): no sound from here. (The small floating window keeps
+        // the activity started, so it plays on; closing that window stops the activity.)
+        playersInFront(false)
         appContainer.remote.stop()
         appContainer.sync.pause()
         super.onStop()
