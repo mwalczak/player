@@ -1,5 +1,7 @@
 package com.mwalczak.player.data.epg
 
+import com.mwalczak.player.data.scopedName
+import com.mwalczak.player.data.FIRST_PROFILE
 import android.content.Context
 import android.net.ConnectivityManager
 import android.util.Xml
@@ -63,9 +65,11 @@ class EpgRepository(
     http: OkHttpClient,
     private val xtream: XtreamClient,
     scope: CoroutineScope,
+    profileId: String = FIRST_PROFILE,
 ) {
     private val http = http.newBuilder().readTimeout(120, java.util.concurrent.TimeUnit.SECONDS).build()
-    private val db = EpgDatabase(context)
+    // Each profile has its own guide: other channels, other stream ids.
+    @Volatile private var db = EpgDatabase(context, scopedName(profileId, "epg.db"))
     private val dir = File(context.filesDir, "epg").apply { mkdirs() }
     private val mutex = Mutex()
 
@@ -80,13 +84,7 @@ class EpgRepository(
         // Files from the single-guide version.
         listOf("epg_source", "epg_source.url", "epg_cache.json").forEach { File(context.filesDir, it).delete() }
         scope.launch(Dispatchers.IO) {
-            _state.update {
-                it.copy(
-                    channelsWithGuide = db.channelCount(),
-                    updatedAtMillis = db.meta(META_UPDATED)?.toLongOrNull() ?: 0,
-                    sources = db.meta(META_SOURCES)?.split('|')?.filter(String::isNotBlank).orEmpty(),
-                )
-            }
+            loadState()
             while (true) {
                 refreshOnAir()
                 delay(60_000)
@@ -215,6 +213,24 @@ class EpgRepository(
                 )
             }
         }
+    }
+
+    private fun loadState() {
+        _state.value = EpgState(
+            channelsWithGuide = db.channelCount(),
+            updatedAtMillis = db.meta(META_UPDATED)?.toLongOrNull() ?: 0,
+            sources = db.meta(META_SOURCES)?.split('|')?.filter(String::isNotBlank).orEmpty(),
+        )
+    }
+
+    /** Another profile's guide (downloaded files are shared; matching them is per profile). */
+    suspend fun switchTo(profileId: String) = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            db.close()
+            db = EpgDatabase(context, scopedName(profileId, "epg.db"))
+            loadState()
+        }
+        refreshOnAir()
     }
 
     private suspend fun refreshOnAir() {

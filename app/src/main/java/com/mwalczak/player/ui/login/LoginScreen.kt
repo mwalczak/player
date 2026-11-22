@@ -50,7 +50,14 @@ import com.mwalczak.player.data.ServerUrls
 import kotlinx.coroutines.launch
 
 @Composable
-fun LoginScreen(container: AppContainer, onLoggedIn: () -> Unit) {
+fun LoginScreen(
+    container: AppContainer,
+    onLoggedIn: () -> Unit,
+    /** Adding another profile (with its own login) rather than signing in. */
+    addingProfile: Boolean = false,
+    onCancel: () -> Unit = {},
+) {
+    var profileName by rememberSaveable { mutableStateOf("") }
     var server by rememberSaveable { mutableStateOf("") }
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
@@ -76,8 +83,12 @@ fun LoginScreen(container: AppContainer, onLoggedIn: () -> Unit) {
         scope.launch {
             try {
                 container.xtream.authenticate(creds)
-                container.settings.saveCredentials(creds)
-                container.appScope.launch { container.catalog.load(creds, force = true) }
+                if (addingProfile) {
+                    container.addProfile(profileName, creds)
+                } else {
+                    container.settings.saveCredentials(creds)
+                    container.appScope.launch { container.catalog.load(creds, force = true) }
+                }
                 onLoggedIn()
             } catch (e: Exception) {
                 error = e.message ?: "Could not connect to the server."
@@ -90,10 +101,15 @@ fun LoginScreen(container: AppContainer, onLoggedIn: () -> Unit) {
     val header: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Icon(Icons.Default.LiveTv, contentDescription = null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
-            Text("Bunny Player", style = MaterialTheme.typography.headlineMedium)
+            Text(if (addingProfile) "New profile" else "Bunny Player", style = MaterialTheme.typography.headlineMedium)
             Text(
-                "Sign in with the Xtream Codes details from your provider (e.g. the mybunny.tv account page or welcome email). " +
-                    "You only need to do this once – the app remembers you.",
+                if (addingProfile) {
+                    "A profile has its own login, favorites, lists, pinned and hidden categories and TV guide. " +
+                        "The profile you have stays as it is; switch between them in Settings or on Home."
+                } else {
+                    "Sign in with the Xtream Codes details from your provider (e.g. the mybunny.tv account page or welcome email). " +
+                        "You only need to do this once – the app remembers you."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -101,6 +117,17 @@ fun LoginScreen(container: AppContainer, onLoggedIn: () -> Unit) {
     }
     val form: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            if (addingProfile) {
+                OutlinedTextField(
+                    value = profileName,
+                    onValueChange = { profileName = it },
+                    label = { Text("Profile name") },
+                    placeholder = { Text("e.g. Kids, Parents, Second provider") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                )
+            }
             if (showM3u) {
                 OutlinedTextField(
                     value = m3uLink,
@@ -158,7 +185,10 @@ fun LoginScreen(container: AppContainer, onLoggedIn: () -> Unit) {
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
 
             Button(onClick = ::signIn, enabled = !busy, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-                if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Sign in")
+                if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text(if (addingProfile) "Add profile" else "Sign in")
+            }
+            if (addingProfile) {
+                TextButton(onClick = onCancel, enabled = !busy) { Text("Cancel") }
             }
             TextButton(onClick = { showM3u = !showM3u }) {
                 Text(if (showM3u) "Hide M3U link" else "I have an M3U link instead")

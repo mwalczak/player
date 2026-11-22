@@ -111,5 +111,14 @@
     "items": [
       "Switching to another app stops the stream completely (full screen and the browsing preview); coming back picks up the live picture again"
     ]
+  },
+  {
+    "id": 13,
+    "date": "2026-11-22",
+    "title": "Profiles",
+    "items": [
+      "Several profiles, each with its own login, favorites, lists, pinned and hidden categories, sync and TV guide: Settings → Profiles → Add profile",
+      "Switch in Settings or with “Switch profile” on Home; your current setup is the first profile"
+    ]
   }
 ]

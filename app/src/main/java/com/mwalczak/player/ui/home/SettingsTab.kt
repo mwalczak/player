@@ -143,6 +143,9 @@ fun SettingsTab(container: AppContainer, actions: Actions) {
     val activity = LocalActivity.current
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).widthIn(max = 760.dp)) {
+        SectionHeader(startPadding = 16.dp, text = "Profiles")
+        ProfilesSection(container, actions)
+
         SectionHeader(startPadding = 16.dp, text = "Account")
         ListItem(
             headlineContent = { Text(creds?.username ?: "—") },

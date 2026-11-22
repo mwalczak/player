@@ -124,6 +124,9 @@ class CatalogRepository(
         }
     }
 
+    /** Another profile: drop this channel list (its cache stays for coming back). */
+    suspend fun forget() = mutex.withLock { _state.value = CatalogState.Idle }
+
     fun clear(creds: Credentials?) {
         _state.value = CatalogState.Idle
         if (creds != null) {

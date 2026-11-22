@@ -17,6 +17,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.io.File
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Mutex
+import com.mwalczak.player.data.Credentials
+import com.mwalczak.player.data.FIRST_PROFILE
+import com.mwalczak.player.data.ProfileStore
 import com.mwalczak.player.data.withoutHidden
 import com.mwalczak.player.data.Catalog
 import kotlinx.coroutines.withContext
@@ -74,12 +80,14 @@ class AppContainer(context: Context) {
         .build()
 
     val settings = SettingsStore(context)
+    /** Profiles on this device; each has its own login, favorites, lists, sync and guide. */
+    val profiles = ProfileStore(context)
     val xtream = XtreamClient(httpClient)
     val catalog = CatalogRepository(context, xtream)
-    val library = LibraryStore(context, appScope)
+    val library = LibraryStore(context, appScope, profiles.current.id)
     val updater = Updater(context, httpClient, appScope, BuildConfig.VERSION_CODE)
     val remote = RemoteControl(context, httpClient, settings, catalog, library, appScope)
-    val epg = EpgRepository(context, httpClient, xtream, appScope)
+    val epg = EpgRepository(context, httpClient, xtream, appScope, profiles.current.id)
     val reminders = ReminderStore(context, appScope).also { it.reschedule() }
     val tvHome = TvHome(context, appScope)
 
@@ -107,9 +115,56 @@ class AppContainer(context: Context) {
 
     /** A channel to open (bunnyplayer://play/<id> from a reminder or the TV home screen), until it's played. */
     val openChannel = MutableStateFlow<Int?>(null)
-    val sync = SyncManager(context, SyncClient(httpClient), settings, library, catalog, appScope)
+    val sync = SyncManager(context, SyncClient(httpClient), settings, library, catalog, appScope, profiles.current.id)
+
+    private val switching = Mutex()
+    private val appContext = context.applicationContext
+
+    /**
+     * Uses another profile: the current one's setup is uploaded first, then its favorites, lists,
+     * sync state, guide, channel list and login are swapped for [id]'s.
+     */
+    suspend fun switchProfile(id: String) = switching.withLock {
+        val profile = profiles.get(id) ?: return@withLock
+        if (profile.id == profiles.current.id) return@withLock
+        runCatching { sync.syncNow() }
+        profiles.setActive(id)
+        library.switchTo(id)
+        sync.switchProfile(id)
+        epg.switchTo(id)
+        catalog.forget()
+        val creds = profile.credentials
+        if (creds != null) {
+            settings.saveCredentials(creds) // fetches its setup (sync) when it changed
+            appScope.launch {
+                catalog.load(creds)
+                // Its own guide: built for its channels if it has none yet (downloaded files are shared).
+                updateGuideIfStale()
+            }
+        } else {
+            settings.clearCredentials()
+        }
+    }
+
+    /** A new profile for [creds] (already checked with the server), switched to at once. */
+    suspend fun addProfile(name: String, creds: Credentials) {
+        val profile = profiles.add(name, creds)
+        switchProfile(profile.id)
+    }
+
+    /** Removes a profile that isn't in use, with its favorites, lists, guide and sync state. */
+    fun removeProfile(id: String) {
+        val profile = profiles.get(id) ?: return
+        if (id == profiles.current.id || id == FIRST_PROFILE) return
+        profiles.remove(id)
+        File(appContext.filesDir, profile.scoped("library.json")).delete()
+        appContext.deleteDatabase(profile.scoped("epg.db"))
+        appContext.deleteSharedPreferences(profile.scoped("sync"))
+    }
 
     init {
+        // Whatever login is in use belongs to the current profile (first sign-in, signing in again).
+        appScope.launch { settings.credentials.collect { profiles.updateCurrentLogin(it) } }
         // The provider renumbers its categories when one is added or removed: keep pins (and
         // favorites and lists) on the same things by name whenever the catalog or library changes.
         appScope.launch {

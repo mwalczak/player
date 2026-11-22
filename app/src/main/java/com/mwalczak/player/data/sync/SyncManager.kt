@@ -1,5 +1,7 @@
 package com.mwalczak.player.data.sync
 
+import com.mwalczak.player.data.scopedName
+import com.mwalczak.player.data.FIRST_PROFILE
 import android.content.Context
 import com.mwalczak.player.CrashReports
 import com.mwalczak.player.data.Libraries
@@ -55,9 +57,11 @@ class SyncManager(
     private val library: LibraryStore,
     private val catalog: CatalogRepository,
     private val scope: CoroutineScope,
+    profileId: String = FIRST_PROFILE,
 ) {
     private val app = context.applicationContext
-    private val prefs = app.getSharedPreferences("sync", Context.MODE_PRIVATE)
+    // Each profile keeps its own sync state (revision, share code, following).
+    @Volatile private var prefs = app.getSharedPreferences(scopedName(profileId, "sync"), Context.MODE_PRIVATE)
     private val mutex = Mutex()
     private val _status = MutableStateFlow(loadStatus())
     val status: StateFlow<SyncStatus> = _status.asStateFlow()
@@ -77,11 +81,18 @@ class SyncManager(
         }
         // Fetch right after signing in, e.g. on a fresh install.
         scope.launch {
-            settings.credentials.map { it?.username }.distinctUntilChanged().drop(1).collect {
+            settings.credentials.map { it?.let { c -> "${c.server}|${c.username}|${c.password}" } }.distinctUntilChanged().drop(1).collect {
                 linked = false
                 if (it != null) syncNow()
             }
         }
+    }
+
+    /** Another profile: its own sync state; its setup is fetched once its login is in use. */
+    suspend fun switchProfile(profileId: String) = mutex.withLock {
+        prefs = app.getSharedPreferences(scopedName(profileId, "sync"), Context.MODE_PRIVATE)
+        linked = false
+        _status.value = loadStatus()
     }
 
     /** While the app is open: sync now and every few minutes. */

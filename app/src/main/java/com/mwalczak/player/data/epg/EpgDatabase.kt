@@ -16,9 +16,9 @@ import kotlin.concurrent.write
  * A refresh writes a complete new database next to the current one ([Builder]) and then swaps it
  * in, so the old guide keeps working until the new one is ready.
  */
-class EpgDatabase(context: Context) {
+class EpgDatabase(context: Context, name: String = "epg.db") {
 
-    private val file: File = context.getDatabasePath("epg.db")
+    private val file: File = context.getDatabasePath(name)
     private val lock = ReentrantReadWriteLock()
     /** Opened on first use (off the main thread); null if it can't be opened, which just means "no guide". */
     private var opened: SQLiteDatabase? = null
@@ -40,7 +40,7 @@ class EpgDatabase(context: Context) {
     inner class Builder internal constructor() {
         // Next to the live database. (Must name the outer file explicitly: inside this class `file`
         // would be the builder's own, not-yet-initialised property.)
-        private val target = File(this@EpgDatabase.file.parentFile, "epg-new.db")
+        private val target = File(this@EpgDatabase.file.parentFile, this@EpgDatabase.file.nameWithoutExtension + "-new.db")
         internal val db: SQLiteDatabase
 
         init {
@@ -94,6 +94,12 @@ class EpgDatabase(context: Context) {
     }
 
     fun newBuilder(): Builder = Builder()
+
+    /** Done with this guide (another profile's is used now). */
+    fun close() = lock.write {
+        runCatching { opened?.close() }
+        opened = null
+    }
 
     /** Replaces the current guide with a finished [builder]. */
     fun swapIn(builder: Builder, meta: Map<String, String>) {

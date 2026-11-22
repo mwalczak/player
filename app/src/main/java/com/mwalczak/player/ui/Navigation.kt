@@ -45,6 +45,7 @@ import kotlinx.coroutines.launch
 
 object Routes {
     const val LOGIN = "login"
+    const val ADD_PROFILE = "add-profile"
     const val HOME = "home"
     const val CATEGORY = "category/{id}"
     const val LIST = "list/{id}"
@@ -118,6 +119,9 @@ class Actions(
 
     fun loggedOut() = nav.navigate(Routes.LOGIN) { popUpTo(0) }
     fun loggedIn() = nav.navigate(Routes.HOME) { popUpTo(0) }
+
+    /** Sign in with another login, as a new profile. */
+    fun addProfile() = nav.navigate(Routes.ADD_PROFILE)
 }
 
 @Composable
@@ -200,6 +204,9 @@ fun AppNavigation(container: AppContainer) {
 
     NavHost(navController = nav, startDestination = startDestination) {
         composable(Routes.LOGIN) { LoginScreen(container, onLoggedIn = actions::loggedIn) }
+        composable(Routes.ADD_PROFILE) {
+            LoginScreen(container, onLoggedIn = actions::loggedIn, addingProfile = true, onCancel = { actions.back() })
+        }
         composable(Routes.HOME) { HomeScreen(container, actions) }
         composable(Routes.CATEGORY) { entry ->
             CategoryScreen(container, actions, categoryId = entry.arguments?.getString("id").orEmpty())

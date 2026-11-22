@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -55,9 +56,10 @@ fun Library.fitPinned(categories: List<Category>): Library {
 }
 
 /** Favorites, user lists and recently watched channels, persisted as a small JSON file. */
-class LibraryStore(context: Context, private val scope: CoroutineScope) {
+class LibraryStore(context: Context, private val scope: CoroutineScope, profileId: String = FIRST_PROFILE) {
 
-    private val file = File(context.filesDir, "library.json")
+    private val dir = context.filesDir
+    @Volatile private var file = File(dir, scopedName(profileId, "library.json"))
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val mutex = Mutex()
 
@@ -142,6 +144,15 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
         if (_library.value == before) return
         // Always persist the latest snapshot, so a slow earlier write can never overwrite a newer one.
         scope.launch(Dispatchers.IO) { mutex.withLock { write(_library.value) } }
+    }
+
+    /** Another profile's favorites, lists and pins (this one's saved first). */
+    suspend fun switchTo(profileId: String) = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            write(_library.value)
+            file = File(dir, scopedName(profileId, "library.json"))
+            _library.value = read()
+        }
     }
 
     private fun read(): Library =

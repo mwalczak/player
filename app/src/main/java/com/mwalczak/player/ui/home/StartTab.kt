@@ -66,7 +66,10 @@ internal fun StartTab(container: AppContainer, actions: Actions, onBrowseFavorit
     // Back from a list or full screen, the remote lands on the tile it came from.
     val gridState = rememberLazyGridState()
     val memory = rememberFocusMemory()
+    val profiles by container.profiles.profiles.collectAsStateWithLifecycle()
+    val showProfile = profiles.profiles.size > 1
     val keys = buildList {
+        if (showProfile) add("")
         add(FAVORITES_TILE)
         if (library.lists.isNotEmpty()) add("")
         library.lists.forEach { add("list-${it.id}") }
@@ -85,6 +88,9 @@ internal fun StartTab(container: AppContainer, actions: Actions, onBrowseFavorit
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        if (showProfile) {
+            item(span = { GridItemSpan(maxLineSpan) }) { ProfileBar(container) }
+        }
         item(key = FAVORITES_TILE) {
             val favorites = library.favorites
             Tile(
