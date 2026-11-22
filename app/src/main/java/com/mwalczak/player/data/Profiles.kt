@@ -54,6 +54,9 @@ class ProfileStore(context: Context) {
 
     fun get(id: String): Profile? = _profiles.value.profiles.firstOrNull { it.id == id }
 
+    /** The profile already using this login (same server host and user), if any. */
+    fun withLogin(creds: Credentials): Profile? = _profiles.value.profiles.firstOrNull { it.credentials?.let { c -> sameLogin(c, creds) } == true }
+
     /** A new profile for [creds] (not switched to yet). */
     fun add(name: String, creds: Credentials): Profile {
         val profile = Profile(UUID.randomUUID().toString().take(8), name.trim().ifBlank { creds.username }, creds.server, creds.username, creds.password)
@@ -105,4 +108,11 @@ class ProfileStore(context: Context) {
     private companion object {
         const val DEFAULT_NAME = "Profile 1"
     }
+}
+
+/** Same user on the same server, however the address was typed. */
+internal fun sameLogin(a: Credentials, b: Credentials): Boolean {
+    fun host(server: String) = runCatching { java.net.URI(if ("://" in server) server else "http://$server").host }.getOrNull()?.lowercase()
+        ?: server.trim().lowercase()
+    return a.username.trim() == b.username.trim() && host(a.server) == host(b.server)
 }

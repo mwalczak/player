@@ -78,6 +78,13 @@ fun LoginScreen(
             error = "Fill in the server URL, username and password."
             return
         }
+        // One profile per login: profiles with the same login would share their favorites and lists online.
+        if (addingProfile) {
+            container.profiles.withLogin(creds)?.let {
+                error = "This login already has a profile (“${it.name}”) – switch to it in Settings → Profiles."
+                return
+            }
+        }
         busy = true
         error = null
         scope.launch {

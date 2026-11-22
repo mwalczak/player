@@ -120,5 +120,14 @@
       "Several profiles, each with its own login, favorites, lists, pinned and hidden categories, sync and TV guide: Settings → Profiles → Add profile",
       "Switch in Settings or with “Switch profile” on Home; your current setup is the first profile"
     ]
+  },
+  {
+    "id": 14,
+    "date": "2026-11-22",
+    "title": "Profiles kept apart",
+    "items": [
+      "Favorites, lists and pins stay with their profile even if sync runs while you switch",
+      "A login can have only one profile (two profiles with one login would share their favorites)"
+    ]
   }
 ]

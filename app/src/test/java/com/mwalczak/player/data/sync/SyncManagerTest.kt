@@ -214,4 +214,18 @@ class SyncManagerTest {
         assertEquals(listOf(3, 2, 1), phone.sync.history().getOrThrow().map { it.revision })
         phone.uninstall()
     }
+
+    @Test
+    fun `while profiles are swapped nothing is synced`(): Unit = runBlocking {
+        settings.saveCredentials(alice)
+        val device = Device()
+        device.library.toggleFavorite(Channel(1, "TVN"))
+        device.sync.holdWhile {
+            device.sync.syncNow()
+            assertTrue(fake.byOwner.isEmpty())
+        }
+        device.sync.syncNow()
+        assertEquals(listOf(1), saved(alice).library.favorites.map { it.streamId })
+        device.uninstall()
+    }
 }

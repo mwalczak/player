@@ -68,4 +68,12 @@ class ProfilesTest {
         assertEquals(listOf(9), library.library.value.favorites.map { it.streamId })
         assertTrue(File(context.filesDir, "library-kids.json").exists())
     }
+
+    @Test
+    fun `a login already in a profile is found, however the server was typed`() {
+        val store = ProfileStore(context)
+        store.updateCurrentLogin(main)
+        assertEquals(FIRST_PROFILE, store.withLogin(Credentials("https://MyBunny.tv:80/", "jan", "new password"))?.id)
+        assertEquals(null, store.withLogin(Credentials("http://mybunny.tv", "ola", "x")))
+    }
 }

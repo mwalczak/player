@@ -128,21 +128,23 @@ class AppContainer(context: Context) {
         val profile = profiles.get(id) ?: return@withLock
         if (profile.id == profiles.current.id) return@withLock
         runCatching { sync.syncNow() }
-        profiles.setActive(id)
-        library.switchTo(id)
-        sync.switchProfile(id)
-        epg.switchTo(id)
-        catalog.forget()
         val creds = profile.credentials
+        // Swapped as a whole, with sync held, so it never sees one profile's login with another's favorites.
+        sync.holdWhile {
+            profiles.setActive(id)
+            library.switchTo(id)
+            sync.switchProfile(id)
+            epg.switchTo(id)
+            catalog.forget()
+            if (creds != null) settings.saveCredentials(creds) else settings.clearCredentials()
+        }
         if (creds != null) {
-            settings.saveCredentials(creds) // fetches its setup (sync) when it changed
+            sync.syncNowInBackground() // its own setup, saved online for its login
             appScope.launch {
                 catalog.load(creds)
                 // Its own guide: built for its channels if it has none yet (downloaded files are shared).
                 updateGuideIfStale()
             }
-        } else {
-            settings.clearCredentials()
         }
     }
 

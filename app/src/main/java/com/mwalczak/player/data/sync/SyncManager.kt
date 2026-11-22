@@ -88,6 +88,22 @@ class SyncManager(
         }
     }
 
+    /** True while profiles are being swapped: no sync step may run then. */
+    @Volatile private var held = false
+
+    /**
+     * Runs [block] (swapping profiles) with sync held: it waits for a running step, and none starts
+     * until it's done, so nothing is ever saved with one profile's login and another's favorites.
+     */
+    suspend fun <T> holdWhile(block: suspend () -> T): T {
+        mutex.withLock { held = true }
+        try {
+            return block()
+        } finally {
+            held = false
+        }
+    }
+
     /** Another profile: its own sync state; its setup is fetched once its login is in use. */
     suspend fun switchProfile(profileId: String) = mutex.withLock {
         prefs = app.getSharedPreferences(scopedName(profileId, "sync"), Context.MODE_PRIVATE)
@@ -183,6 +199,7 @@ class SyncManager(
 
     /** One sync step at a time; errors end up in [status] (and the crash report, for the odd ones). */
     private suspend fun locked(block: suspend () -> Unit) = mutex.withLock {
+        if (held) return@withLock
         _status.update { it.copy(busy = true) }
         val result = runCatching { block() }
         result.exceptionOrNull()?.let { if (it !is java.io.IOException) CrashReports.record(app, "Sync", it) }
