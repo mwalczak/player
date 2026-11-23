@@ -1,5 +1,6 @@
 FROM python:3.12-alpine
 WORKDIR /app
+RUN apk upgrade --no-cache
 COPY sync_server.py .
 ENV PORT=8080 SYNC_DB=/data/sync.db PYTHONUNBUFFERED=1
 EXPOSE 8080

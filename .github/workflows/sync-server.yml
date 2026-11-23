@@ -9,6 +9,9 @@ on:
       - server/**
       - .github/workflows/sync-server.yml
   workflow_dispatch:
+  # Weekly rebuild (Mondays 03:37 UTC) to pick up base image and Alpine security fixes
+  schedule:
+    - cron: '37 3 * * 1'
 
 permissions:
   contents: read
@@ -20,6 +23,8 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/${{ github.repository }}-sync
+  # Unique per run, so a scheduled rebuild of the same commit still rolls out
+  TAG: ${{ github.sha }}-${{ github.run_number }}
 
 jobs:
   deploy:
@@ -42,9 +47,11 @@ jobs:
         with:
           context: server
           push: true
+          pull: true
+          no-cache: true
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           tags: |
-            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:${{ env.TAG }}
             ${{ env.IMAGE }}:latest
 
       - name: Set up SSH
@@ -56,7 +63,7 @@ jobs:
 
       - name: Deploy to k3s
         run: |
-          sed "s|IMAGE_PLACEHOLDER|${IMAGE}:${GITHUB_SHA}|" server/k8s.yaml \
+          sed "s|IMAGE_PLACEHOLDER|${IMAGE}:${TAG}|" server/k8s.yaml \
             | ssh debian@${{ secrets.VPS_HOST }} \
                 'export KUBECONFIG=$HOME/.kube/config
                  kubectl apply -f - &&
